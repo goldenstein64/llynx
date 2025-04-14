@@ -28,7 +28,7 @@ const LUAROCKS_ENDPOINT: &str = "https://luarocks.org/m/lls-addons";
 const SETTINGS_FILE: &str = ".vscode/settings.json";
 const LIB_SETTINGS_KEY: &str = "Lua.workspace.library";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct VSCodeSettings {
     #[serde(rename = "Lua.workspace.library")]
     library: Option<Vec<String>>,
@@ -93,7 +93,7 @@ struct Addon {
 }
 
 /// adds a LuaLS addon using LuaRocks
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 #[command(name = "lady", long_about = None)]
 struct Cli {
     /// set a custom rocks tree directory
@@ -108,7 +108,7 @@ struct Cli {
     command: Option<Action>,
 }
 
-#[derive(Subcommand, PartialEq, Eq, Debug)]
+#[derive(Debug, Subcommand, PartialEq, Eq)]
 enum ListSource {
     /// list every addon in the LuaRocks manifest
     Online,
@@ -120,7 +120,7 @@ enum ListSource {
     Enabled,
 }
 
-#[derive(Subcommand, PartialEq, Eq, Debug)]
+#[derive(Debug, Subcommand, PartialEq, Eq)]
 enum Action {
     /// list all installed, online, or enabled addons
     List {
@@ -238,7 +238,7 @@ fn list_enabled(filter: Option<String>) -> Result<Vec<Addon>> {
     Ok(addons)
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct InstalledAddonRecord {
     pub name: String,
     pub version: String,
@@ -285,7 +285,7 @@ fn list_installed(filter: Option<String>) -> Result<Vec<Addon>> {
     Ok(addons)
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct OnlineAddonRecord {
     pub name: String,
     pub version: String,
