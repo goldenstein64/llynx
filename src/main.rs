@@ -9,7 +9,7 @@
 // Assumptions:
 // - Only one version of an addon can be enabled at any time
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use clap::{CommandFactory, Parser, Subcommand};
 use jsonc_parser::{ParseOptions, parse_to_serde_value};
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,7 @@ use std::{
     fmt,
     fs::{self},
     io::{self, Cursor, Write},
+    iter,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -34,6 +35,15 @@ struct VSCodeSettings {
 
     #[serde(flatten)]
     rest: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Default for VSCodeSettings {
+    fn default() -> Self {
+        VSCodeSettings {
+            library: None,
+            rest: serde_json::Map::new(),
+        }
+    }
 }
 
 /// error type for showing multiple errors
@@ -90,9 +100,9 @@ struct Cli {
     #[arg(short, long, value_name = "dir", default_value = ".lls_addons", value_parser = clap::value_parser!(PathBuf))]
     tree: Option<PathBuf>,
 
-    /// turn on debugging
+    /// increase verbosity; can be repeated
     #[arg(short, action = clap::ArgAction::Count)]
-    debug: u8,
+    verbose: u8,
 
     #[command(subcommand)]
     command: Option<Action>,
@@ -164,29 +174,22 @@ fn list_enabled(filter: Option<String>) -> Result<Vec<Addon>> {
         Ok(contents) => contents,
     };
 
-    let vscode_settings_parsed = match parse_to_serde_value(&contents, &ParseOptions::default()) {
-        Err(source) => {
-            return Err(source).with_context(|| format!("parsing '{SETTINGS_FILE}' failed"));
+    let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
+        .with_context(|| format!("parsing '{SETTINGS_FILE}' failed"))?;
+    let value_parsed = match maybe_value_parsed {
+        None => {
+            println!("file '{SETTINGS_FILE}' is empty. Assuming empty...");
+            return Ok(vec![]);
         }
-        Ok(parsed) => match parsed {
-            None => {
-                println!("file '{SETTINGS_FILE}' is empty. Assuming empty...");
-                return Ok(vec![]);
-            }
-            Some(vscode_settings) => vscode_settings,
-        },
+        Some(vscode_settings_parsed) => vscode_settings_parsed,
     };
 
-    let vscode_settings = match serde_json::from_value::<VSCodeSettings>(vscode_settings_parsed) {
-        Err(source) => {
-            return Err(source).with_context(|| format!("compiling '{SETTINGS_FILE}' failed"));
-        }
-        Ok(vscode_settings) => vscode_settings,
-    };
+    let vscode_settings = serde_json::from_value::<VSCodeSettings>(value_parsed)
+        .with_context(|| format!("compiling '{SETTINGS_FILE}' failed"))?;
 
     let library = match vscode_settings.library {
         None => {
-            println!("'{LIB_SETTINGS_KEY}' key doesn't exist. Assuming empty...");
+            println!("key '{LIB_SETTINGS_KEY}' not found. Assuming empty...");
             return Ok(vec![]);
         }
         Some(lib) => lib,
@@ -209,13 +212,13 @@ fn list_enabled(filter: Option<String>) -> Result<Vec<Addon>> {
                 Ok(Addon {
                     name: name
                         .file_name()
-                        .expect("version must be a directory")
+                        .expect("directory starts with ADDONS_MATCHER")
                         .to_str()
                         .ok_or(anyhow!("version directory is not valid UTF-8"))?
                         .to_string(),
                     version: version
                         .file_name()
-                        .expect("version must be a directory")
+                        .expect("directory starts with ADDONS_MATCHER")
                         .to_str()
                         .ok_or(anyhow!("version directory is not valid UTF-8"))?
                         .to_string(),
@@ -400,33 +403,104 @@ fn remove(name: String, version: Option<String>) -> Result<()> {
     Ok(())
 }
 
+fn update_library(f: impl FnOnce(Vec<String>) -> Result<Vec<String>>) -> Result<()> {
+    let contents = match fs::read_to_string(SETTINGS_FILE) {
+        Err(source) => match source.kind() {
+            io::ErrorKind::NotFound => String::new(),
+            _ => return Err(source).with_context(|| format!("reading '{SETTINGS_FILE}' failed")),
+        },
+        Ok(contents) => contents,
+    };
+
+    let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
+        .with_context(|| format!("parsing '{SETTINGS_FILE}' failed"))?;
+    let mut vscode_settings = match maybe_value_parsed {
+        None => VSCodeSettings::default(),
+        Some(value_parsed) => serde_json::from_value::<VSCodeSettings>(value_parsed)
+            .with_context(|| format!("compiling '{SETTINGS_FILE}' failed"))?,
+    };
+
+    vscode_settings.library = Some(f(vscode_settings.library.unwrap_or_default())?);
+
+    let new_contents: String = serde_json::to_string(&vscode_settings)?;
+    Ok(fs::write(SETTINGS_FILE, new_contents)?)
+}
+
 /// add the addon to .vscode/settings.json
 fn enable(name: String) -> Result<()> {
     if list_enabled(None)?
         .into_iter()
         .any(|addon| addon.name == name)
     {
-        bail!("addon '{name}' is already installed")
+        println!("addon '{name}' is already installed");
+        return Ok(());
     }
 
     let addon = list_installed(None)?
         .into_iter()
-        .find(|addon| addon.name == name);
+        .find(|addon| addon.name == name)
+        .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
 
-    if let None = addon {
-        bail!("addon '{name}' is not installed")
-    }
+    let location = addon
+        .location
+        .expect("installed addons always have a location");
 
-    todo!()
+    let path = Path::new(&location);
+    let types_path = path.join("types");
+    let types_path_str = types_path
+        .to_str()
+        .ok_or_else(|| anyhow!("addon location is not valid UTF-8"))?;
+
+    update_library(|library| {
+        Ok(library
+            .into_iter()
+            .chain(iter::once(types_path_str.to_string()))
+            .collect())
+    })
 }
 
 /// remove the addon from .vscode/settings.json
 fn disable(name: String) -> Result<()> {
-    todo!()
+    if list_enabled(None)?
+        .into_iter()
+        .any(|addon| addon.name != name)
+    {
+        println!("addon '{name}' is not installed");
+        return Ok(());
+    }
+
+    let addon = list_installed(None)?
+        .into_iter()
+        .find(|addon| addon.name == name)
+        .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
+
+    let location = addon
+        .location
+        .expect("installed addons always have a location");
+
+    let path = Path::new(&location);
+    let types_path = path.join("types");
+    let types_path_str = types_path
+        .to_str()
+        .ok_or_else(|| anyhow!("addon location is not valid UTF-8"))?;
+
+    update_library(|library| {
+        Ok(library
+            .into_iter()
+            .filter(|loc| loc != types_path_str)
+            .collect())
+    })
 }
 
 fn main() -> Result<()> {
     let parsed = Cli::parse();
+
+    let verbosity = parsed.verbose;
+
+    stderrlog::new()
+        .timestamp(stderrlog::Timestamp::Off)
+        .verbosity(verbosity as usize)
+        .init()?;
 
     match parsed.command {
         None => Cli::command().print_help().unwrap(),
