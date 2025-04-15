@@ -638,4 +638,11 @@ mod test_list_enabled {
             list_enabled("tests/.lls_addons", "tests/settings/no_library.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
+
+    #[test]
+    fn one_addon() {
+        let addons =
+            list_enabled("tests/.lls_addons", "tests/settings/one_addon.json", None).unwrap();
+        assert_eq!(addons, vec![LUA_CJSON_ADDON.clone()])
+    }
 }

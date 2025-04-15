@@ -1,0 +1,5 @@
+{
+  "Lua.workspace.library": [
+    "tests\\.lls_addons\\lib\\luarocks\\rocks-5.1\\lua-cjson\\2.1.0.9-1\\types"
+  ]
+}
