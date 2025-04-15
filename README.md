@@ -2,6 +2,8 @@
 
 a thin [LuaRocks](https://luarocks.org/) wrapper intended for installing addons for [Lua Language Server](https://github.com/LuaLS/lua-language-server)
 
+## Usage
+
 ```console
 $ llynx help
 adds a LuaLS addon using LuaRocks
@@ -22,4 +24,16 @@ Options:
       --server <url>          make LuaRocks look for addons in this server only [default: https://luarocks.org/m/lls-addons]
   -v...                       increase verbosity; can be repeated
   -h, --help                  Print help
+```
+
+## Installation
+
+No instructions here yet
+
+## Building
+
+Run `cargo build`
+
+```bash
+cargo build
 ```
