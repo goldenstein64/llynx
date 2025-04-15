@@ -1,6 +1,6 @@
 # llynx
 
-> ![WARNING]
+> [!WARNING]
 >
 > This project is still in early development! Pretty much everything is untested. Bug reports are appreciated!
 
