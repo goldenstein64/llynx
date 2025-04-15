@@ -513,7 +513,7 @@ fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> R
     let types_path_string = types_path
         .into_os_string()
         .into_string()
-        .map_err(|os_str| anyhow!("unable to convert OsString '{os_str:?}' to a String"))?;
+        .map_err(|os_str| anyhow!("string {os_str:?} contains invalid Unicode data"))?;
 
     update_library(settings_file, |library| {
         Ok(library
