@@ -258,8 +258,8 @@ struct InstalledAddonRecord {
 }
 
 /// fetches from the .lls_addons tree
-fn list_installed(tree: &str, filter: Option<String>) -> Result<Vec<Addon>> {
-    let mut luarocks = Command::new("luarocks");
+fn list_installed(tree: &str, luarocks_path: &str, filter: Option<String>) -> Result<Vec<Addon>> {
+    let mut luarocks = Command::new(luarocks_path);
     luarocks.args(["--tree", tree, "list", "--porcelain"]);
     if let Some(fil) = filter {
         luarocks.arg(fil);
@@ -322,8 +322,8 @@ struct OnlineAddonRecord {
 }
 
 /// fetches from luarocks.org
-fn list_online(server: &str, filter: Option<String>) -> Result<Vec<Addon>> {
-    let mut luarocks = Command::new("luarocks");
+fn list_online(server: &str, luarocks_path: &str, filter: Option<String>) -> Result<Vec<Addon>> {
+    let mut luarocks = Command::new(luarocks_path);
     luarocks.args(["--only-server", server, "search", "--porcelain"]);
     if let Some(fil) = filter {
         luarocks.arg(fil);
@@ -360,23 +360,7 @@ fn list_online(server: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     Ok(addons)
 }
 
-fn list(
-    server: &str,
-    tree: &str,
-    settings_file: &str,
-    source: Option<ListSource>,
-    filter: Option<String>,
-) -> Result<()> {
-    let used_source = match source {
-        Some(src) => src,
-        None => ListSource::Installed,
-    };
-    let mut addons = match used_source {
-        ListSource::Enabled => list_enabled(settings_file, filter),
-        ListSource::Installed => list_installed(tree, filter),
-        ListSource::Online => list_online(server, filter),
-    }
-    .with_context(|| "error while listing addons")?;
+fn print_addons_list(mut addons: Vec<Addon>) -> Result<()> {
     if addons.is_empty() {
         log::warn!("no addons found matching criteria");
         return Ok(());
@@ -419,8 +403,13 @@ fn execute_command(mut command: Command) -> Result<()> {
     Ok(())
 }
 
-fn get_install_command(tree: &str, name: &str, version: Option<String>) -> Result<Command> {
-    let mut command = Command::new("luarocks");
+fn get_install_command(
+    tree: &str,
+    luarocks_path: &str,
+    name: &str,
+    version: Option<String>,
+) -> Result<Command> {
+    let mut command = Command::new(luarocks_path);
     command.args(["--tree", tree, "install", name]);
     if let Some(ver) = version {
         command.arg(ver);
@@ -429,12 +418,17 @@ fn get_install_command(tree: &str, name: &str, version: Option<String>) -> Resul
 }
 
 /// forward installing to LuaRocks
-fn install(tree: &str, name: &str, version: Option<String>) -> Result<()> {
-    execute_command(get_install_command(tree, name, version)?)
+fn install(tree: &str, luarocks_path: &str, name: &str, version: Option<String>) -> Result<()> {
+    execute_command(get_install_command(tree, luarocks_path, name, version)?)
 }
 
-fn get_remove_command(tree: &str, name: &str, version: Option<String>) -> Result<Command> {
-    let mut command = Command::new("luarocks");
+fn get_remove_command(
+    tree: &str,
+    luarocks_path: &str,
+    name: &str,
+    version: Option<String>,
+) -> Result<Command> {
+    let mut command = Command::new(luarocks_path);
     command.args(["--tree", tree, "remove", name]);
     if let Some(ver) = version {
         command.arg(ver);
@@ -443,7 +437,7 @@ fn get_remove_command(tree: &str, name: &str, version: Option<String>) -> Result
 }
 
 /// forward uninstalling to LuaRocks
-fn remove(tree: &str, name: &str, version: Option<String>) -> Result<()> {
+fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<String>) -> Result<()> {
     #[cfg(feature = "disable_before_remove")]
     if list_enabled(None)?
         .into_iter()
@@ -454,7 +448,7 @@ fn remove(tree: &str, name: &str, version: Option<String>) -> Result<()> {
             .with_context(|| format!("error while disabling addon '{name}' before uninstalling"))?;
     }
 
-    execute_command(get_remove_command(tree, name, version)?)
+    execute_command(get_remove_command(tree, luarocks_path, name, version)?)
 }
 
 /// read from a settings file and write to it again
@@ -486,7 +480,7 @@ fn update_library(
 }
 
 /// add the addon to .vscode/settings.json
-fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
+fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
     if list_enabled(settings_file, None)?
         .into_iter()
         .any(|addon| addon.name == name)
@@ -495,7 +489,7 @@ fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let addon = list_installed(tree, None)?
+    let addon = list_installed(tree, luarocks_path, None)?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -520,7 +514,7 @@ fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
 }
 
 /// remove the addon from .vscode/settings.json
-fn disable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
+fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
     if list_enabled(settings_file, None)?
         .into_iter()
         .any(|addon| addon.name != name)
@@ -529,7 +523,7 @@ fn disable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let addon = list_installed(tree, None)?
+    let addon = list_installed(tree, luarocks_path, None)?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -574,12 +568,20 @@ fn main() -> Result<()> {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
-                list(&parsed.server, tree, settings, source, filter)?;
+                let used_source = source.unwrap_or(ListSource::Installed);
+                let addons = match used_source {
+                    ListSource::Enabled => list_enabled(settings, filter),
+                    ListSource::Installed => list_installed(tree, "luarocks", filter),
+                    ListSource::Online => list_online(&parsed.server, "luarocks", filter),
+                }
+                .with_context(|| "error while listing addons")?;
+
+                print_addons_list(addons)?;
             }
-            Action::Install { name, version } => install(tree, &name, version)?,
-            Action::Remove { name, version } => remove(tree, &name, version)?,
-            Action::Enable { name } => enable(tree, settings, &name)?,
-            Action::Disable { name } => disable(tree, settings, &name)?,
+            Action::Install { name, version } => install(tree, "luarocks", &name, version)?,
+            Action::Remove { name, version } => remove(tree, "luarocks", &name, version)?,
+            Action::Enable { name } => enable(tree, "luarocks", settings, &name)?,
+            Action::Disable { name } => disable(tree, "luarocks", settings, &name)?,
         },
     }
 
@@ -588,7 +590,7 @@ fn main() -> Result<()> {
 
 #[test]
 fn test_list_installed() {
-    let addons = list_installed("tests/.lls_addons", None).unwrap();
+    let addons = list_installed("tests/.lls_addons", "luarocks", None).unwrap();
     let path = Path::new("tests/.lls_addons/lib/luarocks/rocks-5.1/lua-cjson/2.1.0.9-1/types")
         .canonicalize()
         .unwrap();
