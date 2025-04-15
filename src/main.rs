@@ -98,6 +98,10 @@ struct Addon {
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 struct Cli {
+    /// configuration file for specifying frequently used flags
+    #[arg(short, long, value_name = "file-path", conflicts_with_all = ["luarocks", "tree", "settings", "server"])]
+    config: Option<String>,
+
     /// Set the path to the LuaRocks executable
     #[arg(short, long, value_name = "file-path", default_value = "luarocks")]
     luarocks: String,
@@ -111,7 +115,7 @@ struct Cli {
     settings: String,
 
     /// Make LuaRocks look for addons in this server only
-    #[arg(short, long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
+    #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
     server: String,
 
     /// Increase verbosity; can be repeated
@@ -554,6 +558,7 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
 
 fn main() -> Result<()> {
     let Cli {
+        config: _,
         luarocks,
         settings,
         tree,
