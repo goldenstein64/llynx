@@ -1,5 +1,9 @@
 # llynx
 
+> ![WARNING]
+>
+> This project is still in early development! Pretty much everything is untested. Bug reports are appreciated!
+
 a thin [LuaRocks](https://luarocks.org/) wrapper intended for installing addons for [Lua Language Server](https://github.com/LuaLS/lua-language-server)
 
 ## Usage
@@ -26,14 +30,28 @@ Options:
   -h, --help                  Print help
 ```
 
+For development, you should [install a Rust toolchain](https://www.rust-lang.org/tools/install). I use `stable-gnu` on Windows.
+
 ## Installation
 
-No instructions here yet
+Run `cargo install` (this is not set up yet).
+
+```bash
+cargo install llynx
+```
 
 ## Building
 
-Run `cargo build`
+Run `cargo build`.
 
 ```bash
-cargo build
+cargo build --release
+```
+
+## Testing
+
+Run `cargo test`.
+
+```bash
+cargo test
 ```
