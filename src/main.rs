@@ -330,12 +330,13 @@ struct OnlineAddonRecord {
 /// fetches from luarocks.org
 fn list_online(server: &str, luarocks_path: &str, filter: Option<&str>) -> Result<Vec<Addon>> {
     let mut luarocks = Command::new(luarocks_path);
-    luarocks.args(["--only-server", server, "search", "--porcelain"]);
-    if let Some(fil) = filter {
-        luarocks.arg(fil);
-    } else {
-        luarocks.arg("--all");
-    }
+    luarocks.args([
+        "--only-server",
+        server,
+        "search",
+        "--porcelain",
+        filter.unwrap_or("--all"),
+    ]);
     log::info!("executing: {luarocks:?}");
 
     let output = luarocks.output().context("execution of luarocks failed")?;
