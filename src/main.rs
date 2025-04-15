@@ -14,7 +14,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use jsonc_parser::{ParseOptions, parse_to_serde_value};
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt,
+    env, fmt,
     fs::{self},
     io::{self, Cursor, Write},
     iter,
@@ -85,7 +85,7 @@ impl std::error::Error for AggregateError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct Addon {
     name: String,
     version: String,
@@ -280,14 +280,31 @@ fn list_installed(tree: &str, filter: Option<String>) -> Result<Vec<Addon>> {
         .delimiter(b'\t')
         .from_reader(cursor);
 
+    let cwd = env::current_dir()?;
+
     let addons = reader
         .deserialize::<InstalledAddonRecord>()
         .into_iter()
         .map(|row| row.expect("interpreting LuaRocks output"))
-        .map(|record| Addon {
-            name: record.name,
-            version: record.version,
-            location: Some(record.location),
+        .map(|record| {
+            let name = record.name;
+            let version = record.version;
+            let location = record.location;
+            let mut path = PathBuf::from(location);
+            path.push(&name);
+            path.push(&version);
+            path.push("types");
+            let relative_path = path.strip_prefix(&cwd).unwrap_or(&path);
+            Addon {
+                name,
+                version,
+                location: Some(
+                    relative_path
+                        .to_str()
+                        .expect("path is not UTF-8")
+                        .to_string(),
+                ),
+            }
         })
         .collect();
 
@@ -567,4 +584,28 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[test]
+fn test_list_installed() {
+    let addons = list_installed("tests/.lls_addons", None).unwrap();
+    let path = Path::new("tests/.lls_addons/lib/luarocks/rocks-5.1/lua-cjson/2.1.0.9-1/types")
+        .canonicalize()
+        .unwrap();
+    let current_dir = env::current_dir().unwrap().canonicalize().unwrap();
+    println!("{current_dir:?} -> {path:?}");
+    let expected = path
+        .strip_prefix(current_dir)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        addons,
+        vec![Addon {
+            name: String::from("lua-cjson"),
+            version: String::from("2.1.0.9-1"),
+            location: Some(expected)
+        }]
+    );
 }
