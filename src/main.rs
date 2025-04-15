@@ -264,6 +264,7 @@ fn list_installed(tree: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     if let Some(fil) = filter {
         luarocks.arg(fil);
     }
+    log::info!("executing: {luarocks:?}");
 
     let output = luarocks.output().context("execution of luarocks failed")?;
 
@@ -312,6 +313,8 @@ fn list_online(server: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     } else {
         luarocks.arg("--all");
     }
+    log::info!("executing: {luarocks:?}");
+
     let output = luarocks.output().context("execution of luarocks failed")?;
     let stdout =
         std::str::from_utf8(&output.stdout).context("decoding of luarocks output failed")?;
@@ -377,6 +380,8 @@ fn list(
 }
 
 fn execute_command(mut command: Command) -> Result<()> {
+    log::info!("executing: {command:?}");
+
     let result_output = command.output();
     match result_output {
         Ok(output) => {
