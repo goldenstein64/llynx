@@ -547,41 +547,38 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
 }
 
 fn main() -> Result<()> {
-    let parsed = Cli::parse();
-
-    let verbosity = parsed.verbose;
-    let tree = parsed
-        .tree
-        .to_str()
-        .ok_or_else(|| anyhow!("error parsing --tree arg"))?;
-    let settings = parsed
-        .settings
-        .to_str()
-        .ok_or_else(|| anyhow!("error parsing --settings arg"))?;
+    let Cli {
+        luarocks,
+        settings,
+        tree,
+        server,
+        verbose,
+        command,
+    } = Cli::parse();
 
     stderrlog::new()
         .timestamp(stderrlog::Timestamp::Off)
-        .verbosity(verbosity as usize)
+        .verbosity(verbose as usize)
         .init()?;
 
-    match parsed.command {
+    match command {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
                 let used_source = source.unwrap_or(ListSource::Installed);
                 let addons = match used_source {
-                    ListSource::Enabled => list_enabled(settings, filter),
-                    ListSource::Installed => list_installed(tree, "luarocks", filter),
-                    ListSource::Online => list_online(&parsed.server, "luarocks", filter),
+                    ListSource::Enabled => list_enabled(&settings, filter),
+                    ListSource::Installed => list_installed(&tree, &luarocks, filter),
+                    ListSource::Online => list_online(&server, &luarocks, filter),
                 }
-                .with_context(|| "error while listing addons")?;
+                .context("error while listing addons")?;
 
-                print_addons_list(addons)?;
+                print_addons_list(addons);
             }
-            Action::Install { name, version } => install(tree, "luarocks", &name, version)?,
-            Action::Remove { name, version } => remove(tree, "luarocks", &name, version)?,
-            Action::Enable { name } => enable(tree, "luarocks", settings, &name)?,
-            Action::Disable { name } => disable(tree, "luarocks", settings, &name)?,
+            Action::Install { name, version } => install(&tree, &luarocks, &name, version)?,
+            Action::Remove { name, version } => remove(&tree, &luarocks, &name, version)?,
+            Action::Enable { name } => enable(&tree, &luarocks, &settings, &name)?,
+            Action::Disable { name } => disable(&tree, &luarocks, &settings, &name)?,
         },
     }
 
