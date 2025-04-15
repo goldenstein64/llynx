@@ -3,7 +3,7 @@
 a thin [LuaRocks](https://luarocks.org/) wrapper intended for installing addons for [Lua Language Server](https://github.com/LuaLS/lua-language-server)
 
 ```console
-$ lynx help
+$ llynx help
 adds a LuaLS addon using LuaRocks
 
 Usage: llynx.exe [OPTIONS] [COMMAND]
@@ -17,7 +17,9 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -t, --tree <dir>  set a custom rocks tree directory [default: .lls_addons]
-  -v...             increase verbosity; can be repeated
-  -h, --help        Print help
+  -t, --tree <dir-path>       set a custom rocks tree directory [default: .lls_addons]
+  -s, --settings <file-path>  modify this settings file [default: .vscode/settings.json]
+      --server <url>          make LuaRocks look for addons in this server only [default: https://luarocks.org/m/lls-addons]
+  -v...                       increase verbosity; can be repeated
+  -h, --help                  Print help
 ```
