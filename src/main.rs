@@ -94,11 +94,15 @@ struct Addon {
 
 /// adds a LuaLS addon using LuaRocks
 #[derive(Debug, Parser)]
-#[command(name = "lady", long_about = None)]
+#[command(long_about = None)]
 struct Cli {
     /// set a custom rocks tree directory
-    #[arg(short, long, value_name = "dir", default_value = ADDONS_DIR)]
+    #[arg(short, long, value_name = "dir-path", default_value = ADDONS_DIR)]
     tree: PathBuf,
+
+    /// modify this settings file
+    #[arg(short, long, value_name = "file-path", default_value = SETTINGS_FILE)]
+    settings: PathBuf,
 
     /// increase verbosity; can be repeated
     #[arg(short, action = clap::ArgAction::Count)]
@@ -162,30 +166,30 @@ enum Action {
 }
 
 /// fetches from .vscode/settings.json
-fn list_enabled(filter: Option<String>) -> Result<Vec<Addon>> {
-    let contents = match fs::read_to_string(SETTINGS_FILE) {
+fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon>> {
+    let contents = match fs::read_to_string(settings_file) {
         Err(source) => match source.kind() {
             io::ErrorKind::NotFound => {
-                println!("file '{SETTINGS_FILE}' was not found. Assuming empty...");
+                println!("file '{settings_file}' was not found. Assuming empty...");
                 return Ok(vec![]);
             }
-            _ => return Err(source).with_context(|| format!("reading '{SETTINGS_FILE}' failed")),
+            _ => return Err(source).with_context(|| format!("reading '{settings_file}' failed")),
         },
         Ok(contents) => contents,
     };
 
     let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
-        .with_context(|| format!("parsing '{SETTINGS_FILE}' failed"))?;
+        .with_context(|| format!("parsing '{settings_file}' failed"))?;
     let value_parsed = match maybe_value_parsed {
         None => {
-            println!("file '{SETTINGS_FILE}' is empty. Assuming empty...");
+            println!("file '{settings_file}' is empty. Assuming empty...");
             return Ok(vec![]);
         }
         Some(vscode_settings_parsed) => vscode_settings_parsed,
     };
 
     let vscode_settings = serde_json::from_value::<VSCodeSettings>(value_parsed)
-        .with_context(|| format!("compiling '{SETTINGS_FILE}' failed"))?;
+        .with_context(|| format!("compiling '{settings_file}' failed"))?;
 
     let library = match vscode_settings.library {
         None => {
@@ -332,13 +336,18 @@ fn list_online(filter: Option<String>) -> Result<Vec<Addon>> {
     Ok(addons)
 }
 
-fn list(tree: &str, source: Option<ListSource>, filter: Option<String>) -> Result<()> {
+fn list(
+    tree: &str,
+    settings_file: &str,
+    source: Option<ListSource>,
+    filter: Option<String>,
+) -> Result<()> {
     let used_source = match source {
         Some(src) => src,
         None => ListSource::Installed,
     };
     let mut addons = match used_source {
-        ListSource::Enabled => list_enabled(filter),
+        ListSource::Enabled => list_enabled(settings_file, filter),
         ListSource::Installed => list_installed(filter, tree),
         ListSource::Online => list_online(filter),
     }
@@ -450,7 +459,7 @@ fn update_library(
 
 /// add the addon to .vscode/settings.json
 fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(None)?
+    if list_enabled(settings_file, None)?
         .into_iter()
         .any(|addon| addon.name == name)
     {
@@ -484,7 +493,7 @@ fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
 
 /// remove the addon from .vscode/settings.json
 fn disable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(None)?
+    if list_enabled(settings_file, None)?
         .into_iter()
         .any(|addon| addon.name != name)
     {
@@ -523,6 +532,10 @@ fn main() -> Result<()> {
         .tree
         .to_str()
         .ok_or_else(|| anyhow!("error parsing --tree arg"))?;
+    let settings = parsed
+        .settings
+        .to_str()
+        .ok_or_else(|| anyhow!("error parsing --settings arg"))?;
 
     stderrlog::new()
         .timestamp(stderrlog::Timestamp::Off)
@@ -533,12 +546,12 @@ fn main() -> Result<()> {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
-                list(tree, source, filter)?;
+                list(tree, settings, source, filter)?;
             }
             Action::Install { name, version } => install(tree, &name, version)?,
             Action::Remove { name, version } => remove(tree, &name, version)?,
-            Action::Enable { name } => enable(tree, SETTINGS_FILE, &name)?,
-            Action::Disable { name } => disable(tree, SETTINGS_FILE, &name)?,
+            Action::Enable { name } => enable(tree, settings, &name)?,
+            Action::Disable { name } => disable(tree, settings, &name)?,
         },
     }
 
