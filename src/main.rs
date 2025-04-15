@@ -98,23 +98,23 @@ struct Addon {
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 struct Cli {
-    /// set the path to the LuaRocks executable
+    /// Set the path to the LuaRocks executable
     #[arg(short, long, value_name = "file-path", default_value = "luarocks")]
     luarocks: String,
 
-    /// set a custom rocks tree directory
+    /// Set a custom rocks tree directory
     #[arg(short, long, value_name = "dir-path", default_value = ADDONS_DIR)]
     tree: String,
 
-    /// modify this settings file
+    /// Modify this settings file
     #[arg(short, long, value_name = "file-path", default_value = SETTINGS_FILE)]
     settings: String,
 
-    /// make LuaRocks look for addons in this server only
+    /// Make LuaRocks look for addons in this server only
     #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
     server: String,
 
-    /// increase verbosity; can be repeated
+    /// Increase verbosity; can be repeated
     #[arg(short, action = clap::ArgAction::Count)]
     verbose: u8,
 
@@ -124,53 +124,53 @@ struct Cli {
 
 #[derive(Debug, Subcommand, PartialEq, Eq)]
 enum ListSource {
-    /// list every addon in the LuaRocks manifest
+    /// List every addon in the LuaRocks manifest
     Online,
 
-    /// list every installed addon
+    /// List every installed addon
     Installed,
 
-    /// list every enabled addon
+    /// List every enabled addon
     Enabled,
 }
 
 #[derive(Debug, Subcommand, PartialEq, Eq)]
 enum Action {
-    /// list all installed, online, or enabled addons
+    /// List all installed, online, or enabled addons
     List {
         #[command(subcommand)]
         source: Option<ListSource>,
 
-        /// only include addons with this string in their names
+        /// Only include addons with this string in their names
         #[arg(short, long)]
         filter: Option<String>,
     },
 
-    /// install an addon
+    /// Install an addon
     Install {
-        /// the addon to install
+        /// The addon to install
         name: String,
-        /// the version to install
+        /// The version to install
         version: Option<String>,
     },
 
-    /// remove an addon
+    /// Remove an addon
     Remove {
-        /// the addon to remove
+        /// The addon to remove
         name: String,
-        /// the specific version of addon to remove
+        /// The specific version of addon to remove
         version: Option<String>,
     },
 
-    /// enable an addon for the current workspace
+    /// Enable an addon for the current workspace
     Enable {
-        /// the addon to enable
+        /// The addon to enable
         name: String,
     },
 
-    /// disable an addon for the current workspace
+    /// Disable an addon for the current workspace
     Disable {
-        /// the addon to disable
+        /// The addon to disable
         name: String,
     },
 }
