@@ -97,8 +97,8 @@ struct Addon {
 #[command(name = "lady", long_about = None)]
 struct Cli {
     /// set a custom rocks tree directory
-    #[arg(short, long, value_name = "dir", default_value = ".lls_addons", value_parser = clap::value_parser!(PathBuf))]
-    tree: Option<PathBuf>,
+    #[arg(short, long, value_name = "dir", default_value = ADDONS_DIR)]
+    tree: PathBuf,
 
     /// increase verbosity; can be repeated
     #[arg(short, action = clap::ArgAction::Count)]
@@ -250,9 +250,9 @@ struct InstalledAddonRecord {
 }
 
 /// fetches from the .lls_addons tree
-fn list_installed(filter: Option<String>) -> Result<Vec<Addon>> {
+fn list_installed(filter: Option<String>, tree: &str) -> Result<Vec<Addon>> {
     let mut luarocks = Command::new("luarocks");
-    luarocks.args(["--tree", ADDONS_DIR, "list", "--porcelain"]);
+    luarocks.args(["--tree", tree, "list", "--porcelain"]);
     if let Some(fil) = filter {
         luarocks.arg(fil);
     }
@@ -332,30 +332,36 @@ fn list_online(filter: Option<String>) -> Result<Vec<Addon>> {
     Ok(addons)
 }
 
-// - list every addon featured on the LuaRocks lls-addons manifest
-// - list every addon installed
-// - list every addon enabled
-fn list(source: Option<ListSource>, filter: Option<String>) -> Result<Vec<Addon>> {
+fn list(tree: &str, source: Option<ListSource>, filter: Option<String>) -> Result<()> {
     let used_source = match source {
         Some(src) => src,
         None => ListSource::Installed,
     };
-
-    // get a list of addons from here
-    match used_source {
+    let mut addons = match used_source {
         ListSource::Enabled => list_enabled(filter),
-        ListSource::Installed => list_installed(filter),
+        ListSource::Installed => list_installed(filter, tree),
         ListSource::Online => list_online(filter),
     }
+    .with_context(|| "error while listing addons")?;
+    if addons.is_empty() {
+        return Err(anyhow!("no addons found matching criteria"));
+    }
+    addons.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
+    let mut last_addon: &Addon = addons.first().expect("already checked if it's empty");
+    println!("{}", last_addon.name);
+    println!("\t{}", last_addon.version);
+    for addon in addons.iter().skip(1) {
+        if last_addon.name != addon.name {
+            last_addon = &addon;
+            println!("\n{}", addon.name);
+        }
+        println!("\t{}", addon.version);
+    }
+
+    Ok(())
 }
 
-/// forward installing to LuaRocks
-fn install(name: String, version: Option<String>) -> Result<()> {
-    let mut command = Command::new("luarocks");
-    command.args(["--tree", ".lls_addons", "install", &name]);
-    if let Some(ver) = version {
-        command.arg(ver);
-    }
+fn execute_command(mut command: Command) -> Result<()> {
     let result_output = command.output();
     match result_output {
         Ok(output) => {
@@ -376,58 +382,74 @@ fn install(name: String, version: Option<String>) -> Result<()> {
     Ok(())
 }
 
-/// forward uninstalling to LuaRocks
-fn remove(name: String, version: Option<String>) -> Result<()> {
+fn get_install_command(tree: &str, name: &str, version: Option<String>) -> Result<Command> {
     let mut command = Command::new("luarocks");
-    command.args(["--tree", ".lls_addons", "remove", &name]);
+    command.args(["--tree", tree, "install", name]);
     if let Some(ver) = version {
         command.arg(ver);
     }
-    let result_output = command.output();
-    match result_output {
-        Ok(output) => {
-            io::stdout()
-                .write_all(&output.stdout)
-                .context("error while writing to stdout")?;
-            io::stderr()
-                .write_all(&output.stderr)
-                .context("error while writing to stderr")?;
-        }
-        Err(err) => {
-            io::stderr()
-                .write_all(format!("{err}").as_bytes())
-                .context("error while writing to stderr")?;
-        }
-    }
-
-    Ok(())
+    Ok(command)
 }
 
-fn update_library(f: impl FnOnce(Vec<String>) -> Result<Vec<String>>) -> Result<()> {
-    let contents = match fs::read_to_string(SETTINGS_FILE) {
+/// forward installing to LuaRocks
+fn install(tree: &str, name: &str, version: Option<String>) -> Result<()> {
+    execute_command(get_install_command(tree, name, version)?)
+}
+
+fn get_remove_command(tree: &str, name: &str, version: Option<String>) -> Result<Command> {
+    let mut command = Command::new("luarocks");
+    command.args(["--tree", tree, "remove", name]);
+    if let Some(ver) = version {
+        command.arg(ver);
+    }
+    Ok(command)
+}
+
+/// forward uninstalling to LuaRocks
+fn remove(tree: &str, name: &str, version: Option<String>) -> Result<()> {
+    #[cfg(feature = "disable_before_remove")]
+    if list_enabled(None)?
+        .into_iter()
+        .any(|addon| addon.name == name)
+    {
+        // disable it first
+        disable(tree, SETTINGS_FILE, name)
+            .with_context(|| format!("error while disabling addon '{name}' before uninstalling"))?;
+    }
+
+    execute_command(get_remove_command(tree, name, version)?)
+}
+
+/// read from a settings file and write to it again
+fn update_library(
+    settings_file: &str,
+    f: impl FnOnce(Vec<String>) -> Result<Vec<String>>,
+) -> Result<()> {
+    let contents = match fs::read_to_string(settings_file) {
         Err(source) => match source.kind() {
             io::ErrorKind::NotFound => String::new(),
-            _ => return Err(source).with_context(|| format!("reading '{SETTINGS_FILE}' failed")),
+            _ => return Err(source).with_context(|| format!("reading '{settings_file}' failed")),
         },
         Ok(contents) => contents,
     };
 
     let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
-        .with_context(|| format!("parsing '{SETTINGS_FILE}' failed"))?;
+        .with_context(|| format!("parsing '{settings_file}' failed"))?;
     let mut vscode_settings = match maybe_value_parsed {
         None => VSCodeSettings::default(),
         Some(value_parsed) => serde_json::from_value::<VSCodeSettings>(value_parsed)
-            .with_context(|| format!("compiling '{SETTINGS_FILE}' failed"))?,
+            .with_context(|| format!("compiling '{settings_file}' failed"))?,
     };
 
     vscode_settings.library = Some(f(vscode_settings.library.unwrap_or_default())?);
 
     let new_contents: String = serde_json::to_string(&vscode_settings)?;
-    Ok(fs::write(SETTINGS_FILE, new_contents)?)
+    fs::write(settings_file, new_contents)?;
+    Ok(())
 }
 
 /// add the addon to .vscode/settings.json
-fn enable(name: String) -> Result<()> {
+fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
     if list_enabled(None)?
         .into_iter()
         .any(|addon| addon.name == name)
@@ -436,7 +458,7 @@ fn enable(name: String) -> Result<()> {
         return Ok(());
     }
 
-    let addon = list_installed(None)?
+    let addon = list_installed(None, tree)?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -447,20 +469,21 @@ fn enable(name: String) -> Result<()> {
 
     let path = Path::new(&location);
     let types_path = path.join("types");
-    let types_path_str = types_path
-        .to_str()
-        .ok_or_else(|| anyhow!("addon location is not valid UTF-8"))?;
+    let types_path_string = types_path
+        .into_os_string()
+        .into_string()
+        .map_err(|os_str| anyhow!("unable to convert OsString '{os_str:?}' to a String"))?;
 
-    update_library(|library| {
+    update_library(settings_file, |library| {
         Ok(library
             .into_iter()
-            .chain(iter::once(types_path_str.to_string()))
+            .chain(iter::once(types_path_string))
             .collect())
     })
 }
 
 /// remove the addon from .vscode/settings.json
-fn disable(name: String) -> Result<()> {
+fn disable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
     if list_enabled(None)?
         .into_iter()
         .any(|addon| addon.name != name)
@@ -469,7 +492,7 @@ fn disable(name: String) -> Result<()> {
         return Ok(());
     }
 
-    let addon = list_installed(None)?
+    let addon = list_installed(None, tree)?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -484,7 +507,7 @@ fn disable(name: String) -> Result<()> {
         .to_str()
         .ok_or_else(|| anyhow!("addon location is not valid UTF-8"))?;
 
-    update_library(|library| {
+    update_library(settings_file, |library| {
         Ok(library
             .into_iter()
             .filter(|loc| loc != types_path_str)
@@ -496,6 +519,10 @@ fn main() -> Result<()> {
     let parsed = Cli::parse();
 
     let verbosity = parsed.verbose;
+    let tree = parsed
+        .tree
+        .to_str()
+        .ok_or_else(|| anyhow!("error parsing --tree arg"))?;
 
     stderrlog::new()
         .timestamp(stderrlog::Timestamp::Off)
@@ -506,26 +533,12 @@ fn main() -> Result<()> {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
-                let mut addons = list(source, filter)?;
-                if addons.is_empty() {
-                    return Err(anyhow!("no addons found matching criteria"));
-                }
-                addons.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
-                let mut last_addon: &Addon = addons.first().expect("already checked if it's empty");
-                println!("{}", last_addon.name);
-                println!("\t{}", last_addon.version);
-                for addon in addons.iter().skip(1) {
-                    if last_addon.name != addon.name {
-                        last_addon = &addon;
-                        println!("\n{}", addon.name);
-                    }
-                    println!("\t{}", addon.version);
-                }
+                list(tree, source, filter)?;
             }
-            Action::Install { name, version } => install(name, version)?,
-            Action::Remove { name, version } => remove(name, version)?,
-            Action::Enable { name } => enable(name)?,
-            Action::Disable { name } => disable(name)?,
+            Action::Install { name, version } => install(tree, &name, version)?,
+            Action::Remove { name, version } => remove(tree, &name, version)?,
+            Action::Enable { name } => enable(tree, SETTINGS_FILE, &name)?,
+            Action::Disable { name } => disable(tree, SETTINGS_FILE, &name)?,
         },
     }
 
