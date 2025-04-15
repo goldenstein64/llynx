@@ -16,3 +16,6 @@ thiserror = "2.0.12"
 
 [features]
 disable_before_remove = []
+
+[[bin]]
+name = "llynx"
