@@ -98,6 +98,7 @@ struct Addon {
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 struct Cli {
+    /// set the path to the LuaRocks executable
     #[arg(short, long, value_name = "file-path", default_value = "luarocks")]
     luarocks: String,
 
