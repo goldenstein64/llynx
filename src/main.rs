@@ -104,6 +104,10 @@ struct Cli {
     #[arg(short, long, value_name = "file-path", default_value = SETTINGS_FILE)]
     settings: PathBuf,
 
+    /// make LuaRocks look for addons in this server only
+    #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
+    server: String,
+
     /// increase verbosity; can be repeated
     #[arg(short, action = clap::ArgAction::Count)]
     verbose: u8,
@@ -254,7 +258,7 @@ struct InstalledAddonRecord {
 }
 
 /// fetches from the .lls_addons tree
-fn list_installed(filter: Option<String>, tree: &str) -> Result<Vec<Addon>> {
+fn list_installed(tree: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     let mut luarocks = Command::new("luarocks");
     luarocks.args(["--tree", tree, "list", "--porcelain"]);
     if let Some(fil) = filter {
@@ -300,9 +304,9 @@ struct OnlineAddonRecord {
 }
 
 /// fetches from luarocks.org
-fn list_online(filter: Option<String>) -> Result<Vec<Addon>> {
+fn list_online(server: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     let mut luarocks = Command::new("luarocks");
-    luarocks.args(["--only-server", LUAROCKS_ENDPOINT, "search", "--porcelain"]);
+    luarocks.args(["--only-server", server, "search", "--porcelain"]);
     if let Some(fil) = filter {
         luarocks.arg(fil);
     } else {
@@ -337,6 +341,7 @@ fn list_online(filter: Option<String>) -> Result<Vec<Addon>> {
 }
 
 fn list(
+    server: &str,
     tree: &str,
     settings_file: &str,
     source: Option<ListSource>,
@@ -348,8 +353,8 @@ fn list(
     };
     let mut addons = match used_source {
         ListSource::Enabled => list_enabled(settings_file, filter),
-        ListSource::Installed => list_installed(filter, tree),
-        ListSource::Online => list_online(filter),
+        ListSource::Installed => list_installed(tree, filter),
+        ListSource::Online => list_online(server, filter),
     }
     .with_context(|| "error while listing addons")?;
     if addons.is_empty() {
@@ -467,7 +472,7 @@ fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let addon = list_installed(None, tree)?
+    let addon = list_installed(tree, None)?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -501,7 +506,7 @@ fn disable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let addon = list_installed(None, tree)?
+    let addon = list_installed(tree, None)?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -546,7 +551,7 @@ fn main() -> Result<()> {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
-                list(tree, settings, source, filter)?;
+                list(&parsed.server, tree, settings, source, filter)?;
             }
             Action::Install { name, version } => install(tree, &name, version)?,
             Action::Remove { name, version } => remove(tree, &name, version)?,
