@@ -22,6 +22,9 @@ use std::{
     process::Command,
 };
 
+#[cfg(test)]
+use std::sync::LazyLock;
+
 const ADDONS_DIR: &str = ".lls_addons";
 const ADDONS_MATCHER: &str = ".lls_addons/lib/luarocks";
 const LUAROCKS_ENDPOINT: &str = "https://luarocks.org/m/lls-addons";
@@ -85,7 +88,7 @@ impl std::error::Error for AggregateError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Addon {
     name: String,
     version: String,
@@ -586,30 +589,22 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
+static LUA_CJSON_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon {
+    name: String::from("lua-cjson"),
+    version: String::from("2.1.0.9-1"),
+    location: Some(String::from(
+        "tests\\.lls_addons\\lib\\luarocks\\rocks-5.1\\lua-cjson\\2.1.0.9-1\\types",
+    )),
+});
+
+#[cfg(test)]
 mod test_list_installed {
     use super::*;
 
     #[test]
-    fn test_list_installed() {
+    fn one_addon() {
         let addons = list_installed("tests/.lls_addons", "luarocks", None).unwrap();
-        let path = Path::new("tests/.lls_addons/lib/luarocks/rocks-5.1/lua-cjson/2.1.0.9-1/types")
-            .canonicalize()
-            .unwrap();
-        let current_dir = env::current_dir().unwrap().canonicalize().unwrap();
-        let expected = path
-            .strip_prefix(current_dir)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
-        assert_eq!(
-            addons,
-            vec![Addon {
-                name: String::from("lua-cjson"),
-                version: String::from("2.1.0.9-1"),
-                location: Some(expected)
-            }]
-        );
+        assert_eq!(addons, vec![LUA_CJSON_ADDON.clone()]);
     }
 }
 
