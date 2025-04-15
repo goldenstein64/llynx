@@ -107,11 +107,11 @@ struct Cli {
     tree: String,
 
     /// Modify this settings file
-    #[arg(short, long, value_name = "file-path", default_value = SETTINGS_FILE)]
+    #[arg(long, value_name = "file-path", default_value = SETTINGS_FILE)]
     settings: String,
 
     /// Make LuaRocks look for addons in this server only
-    #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
+    #[arg(short, long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
     server: String,
 
     /// Increase verbosity; can be repeated
