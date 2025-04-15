@@ -174,7 +174,7 @@ fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon
     let contents = match fs::read_to_string(settings_file) {
         Err(source) => match source.kind() {
             io::ErrorKind::NotFound => {
-                println!("file '{settings_file}' was not found. Assuming empty...");
+                log::warn!("file '{settings_file}' was not found. Assuming empty...");
                 return Ok(vec![]);
             }
             _ => return Err(source).with_context(|| format!("reading '{settings_file}' failed")),
@@ -186,7 +186,7 @@ fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon
         .with_context(|| format!("parsing '{settings_file}' failed"))?;
     let value_parsed = match maybe_value_parsed {
         None => {
-            println!("file '{settings_file}' is empty. Assuming empty...");
+            log::warn!("file '{settings_file}' is empty. Assuming empty...");
             return Ok(vec![]);
         }
         Some(vscode_settings_parsed) => vscode_settings_parsed,
@@ -197,7 +197,7 @@ fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon
 
     let library = match vscode_settings.library {
         None => {
-            println!("key '{LIB_SETTINGS_KEY}' not found. Assuming empty...");
+            log::warn!("key '{LIB_SETTINGS_KEY}' not found. Assuming empty...");
             return Ok(vec![]);
         }
         Some(lib) => lib,
@@ -358,7 +358,8 @@ fn list(
     }
     .with_context(|| "error while listing addons")?;
     if addons.is_empty() {
-        return Err(anyhow!("no addons found matching criteria"));
+        log::warn!("no addons found matching criteria");
+        return Ok(());
     }
     addons.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
     let mut last_addon: &Addon = addons.first().expect("already checked if it's empty");
@@ -468,7 +469,7 @@ fn enable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
         .into_iter()
         .any(|addon| addon.name == name)
     {
-        println!("addon '{name}' is already installed");
+        log::warn!("addon '{name}' is already installed");
         return Ok(());
     }
 
@@ -502,7 +503,7 @@ fn disable(tree: &str, settings_file: &str, name: &str) -> Result<()> {
         .into_iter()
         .any(|addon| addon.name != name)
     {
-        println!("addon '{name}' is not installed");
+        log::warn!("addon '{name}' is not installed");
         return Ok(());
     }
 
