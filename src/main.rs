@@ -323,7 +323,6 @@ struct OnlineAddonRecord {
     #[allow(dead_code)]
     pub source: String,
 }
-
 /// fetches from luarocks.org
 fn list_online(server: &str, luarocks_path: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     let mut luarocks = Command::new(luarocks_path);
@@ -586,26 +585,59 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_list_installed() {
-    let addons = list_installed("tests/.lls_addons", "luarocks", None).unwrap();
-    let path = Path::new("tests/.lls_addons/lib/luarocks/rocks-5.1/lua-cjson/2.1.0.9-1/types")
-        .canonicalize()
-        .unwrap();
-    let current_dir = env::current_dir().unwrap().canonicalize().unwrap();
-    println!("{current_dir:?} -> {path:?}");
-    let expected = path
-        .strip_prefix(current_dir)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    assert_eq!(
-        addons,
-        vec![Addon {
-            name: String::from("lua-cjson"),
-            version: String::from("2.1.0.9-1"),
-            location: Some(expected)
-        }]
-    );
+#[cfg(test)]
+mod test_list_installed {
+    use super::*;
+
+    #[test]
+    fn test_list_installed() {
+        let addons = list_installed("tests/.lls_addons", "luarocks", None).unwrap();
+        let path = Path::new("tests/.lls_addons/lib/luarocks/rocks-5.1/lua-cjson/2.1.0.9-1/types")
+            .canonicalize()
+            .unwrap();
+        let current_dir = env::current_dir().unwrap().canonicalize().unwrap();
+        let expected = path
+            .strip_prefix(current_dir)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(
+            addons,
+            vec![Addon {
+                name: String::from("lua-cjson"),
+                version: String::from("2.1.0.9-1"),
+                location: Some(expected)
+            }]
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_list_enabled {
+    use super::*;
+
+    #[test]
+    fn not_found() {
+        let addons = list_enabled("tests/settings/fake.json", None).unwrap();
+        assert_eq!(addons, vec![]);
+    }
+
+    #[test]
+    fn empty() {
+        let addons = list_enabled("tests/settings/empty.json", None).unwrap();
+        assert_eq!(addons, vec![]);
+    }
+
+    #[test]
+    fn no_library() {
+        let addons = list_enabled("tests/settings/no_library.json", None).unwrap();
+        assert_eq!(addons, vec![]);
+    }
+
+    #[test]
+    fn empty_library() {
+        let addons = list_enabled("tests/settings/no_library.json", None).unwrap();
+        assert_eq!(addons, vec![]);
+    }
 }
