@@ -363,10 +363,10 @@ fn list_online(server: &str, luarocks_path: &str, filter: Option<String>) -> Res
     Ok(addons)
 }
 
-fn print_addons_list(mut addons: Vec<Addon>) -> Result<()> {
+fn print_addons_list(mut addons: Vec<Addon>) -> () {
     if addons.is_empty() {
         log::warn!("no addons found matching criteria");
-        return Ok(());
+        return;
     }
     addons.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
     let mut last_addon: &Addon = addons.first().expect("already checked if it's empty");
@@ -379,8 +379,6 @@ fn print_addons_list(mut addons: Vec<Addon>) -> Result<()> {
         }
         println!("\t{}", addon.version);
     }
-
-    Ok(())
 }
 
 fn execute_command(mut command: Command) -> Result<()> {
