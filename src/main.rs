@@ -569,8 +569,7 @@ fn main() -> Result<()> {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
-                let used_source = source.unwrap_or(ListSource::Installed);
-                let addons = match used_source {
+                let addons = match source.unwrap_or(ListSource::Installed) {
                     ListSource::Enabled => list_enabled(&tree, &settings, filter),
                     ListSource::Installed => list_installed(&tree, &luarocks, filter),
                     ListSource::Online => list_online(&server, &luarocks, filter),
