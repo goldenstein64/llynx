@@ -23,6 +23,7 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
+  -l, --luarocks <file-path>  set the path to the LuaRocks executable [default: luarocks]
   -t, --tree <dir-path>       set a custom rocks tree directory [default: .lls_addons]
   -s, --settings <file-path>  modify this settings file [default: .vscode/settings.json]
       --server <url>          make LuaRocks look for addons in this server only [default: https://luarocks.org/m/lls-addons]
