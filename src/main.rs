@@ -26,7 +26,6 @@ use std::{
 use std::sync::LazyLock;
 
 const ADDONS_DIR: &str = ".lls_addons";
-const ADDONS_MATCHER: &str = ".lls_addons/lib/luarocks";
 const LUAROCKS_ENDPOINT: &str = "https://luarocks.org/m/lls-addons";
 const SETTINGS_FILE: &str = ".vscode/settings.json";
 const LIB_SETTINGS_KEY: &str = "Lua.workspace.library";
@@ -176,7 +175,7 @@ enum Action {
 }
 
 /// fetches from .vscode/settings.json
-fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon>> {
+fn list_enabled(tree: &str, settings_file: &str, filter: Option<String>) -> Result<Vec<Addon>> {
     let contents = match fs::read_to_string(settings_file) {
         Err(source) => match source.kind() {
             io::ErrorKind::NotFound => {
@@ -209,13 +208,15 @@ fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon
         Some(lib) => lib,
     };
 
+    let addons_matcher = format!("{tree}/lib/luarocks");
+
     let addons_unfiltered: Vec<Addon> = AggregateError::from_results(
         library
             .into_iter()
             .map(|s| s)
             .filter(|s| {
                 let path = Path::new(s);
-                path.is_relative() && path.starts_with(ADDONS_MATCHER) && path.ends_with("types")
+                path.is_relative() && path.starts_with(&addons_matcher) && path.ends_with("types")
             })
             .map(|s| {
                 let path = Path::new(&s);
@@ -226,13 +227,13 @@ fn list_enabled(settings_file: &str, filter: Option<String>) -> Result<Vec<Addon
                 Ok(Addon {
                     name: name
                         .file_name()
-                        .expect("directory starts with ADDONS_MATCHER")
+                        .expect("directory starts with addons_matcher")
                         .to_str()
                         .ok_or(anyhow!("version directory is not valid UTF-8"))?
                         .to_string(),
                     version: version
                         .file_name()
-                        .expect("directory starts with ADDONS_MATCHER")
+                        .expect("directory starts with addons_matcher")
                         .to_str()
                         .ok_or(anyhow!("version directory is not valid UTF-8"))?
                         .to_string(),
@@ -484,7 +485,7 @@ fn update_library(
 
 /// add the addon to .vscode/settings.json
 fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(settings_file, None)?
+    if list_enabled(tree, settings_file, None)?
         .into_iter()
         .any(|addon| addon.name == name)
     {
@@ -518,7 +519,7 @@ fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> R
 
 /// remove the addon from .vscode/settings.json
 fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(settings_file, None)?
+    if list_enabled(tree, settings_file, None)?
         .into_iter()
         .any(|addon| addon.name != name)
     {
@@ -570,7 +571,7 @@ fn main() -> Result<()> {
             Action::List { source, filter } => {
                 let used_source = source.unwrap_or(ListSource::Installed);
                 let addons = match used_source {
-                    ListSource::Enabled => list_enabled(&settings, filter),
+                    ListSource::Enabled => list_enabled(&tree, &settings, filter),
                     ListSource::Installed => list_installed(&tree, &luarocks, filter),
                     ListSource::Online => list_online(&server, &luarocks, filter),
                 }
@@ -614,25 +615,27 @@ mod test_list_enabled {
 
     #[test]
     fn not_found() {
-        let addons = list_enabled("tests/settings/fake.json", None).unwrap();
+        let addons = list_enabled("tests/.lls_addons", "tests/settings/fake.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn empty() {
-        let addons = list_enabled("tests/settings/empty.json", None).unwrap();
+        let addons = list_enabled("tests/.lls_addons", "tests/settings/empty.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn no_library() {
-        let addons = list_enabled("tests/settings/no_library.json", None).unwrap();
+        let addons =
+            list_enabled("tests/.lls_addons", "tests/settings/no_library.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn empty_library() {
-        let addons = list_enabled("tests/settings/no_library.json", None).unwrap();
+        let addons =
+            list_enabled("tests/.lls_addons", "tests/settings/no_library.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
 }
