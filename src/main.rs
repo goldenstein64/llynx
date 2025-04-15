@@ -96,13 +96,16 @@ struct Addon {
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 struct Cli {
+    #[arg(short, long, value_name = "file-path", default_value = "luarocks")]
+    luarocks: String,
+
     /// set a custom rocks tree directory
     #[arg(short, long, value_name = "dir-path", default_value = ADDONS_DIR)]
-    tree: PathBuf,
+    tree: String,
 
     /// modify this settings file
     #[arg(short, long, value_name = "file-path", default_value = SETTINGS_FILE)]
-    settings: PathBuf,
+    settings: String,
 
     /// make LuaRocks look for addons in this server only
     #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
