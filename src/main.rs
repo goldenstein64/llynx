@@ -485,7 +485,7 @@ fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> R
         return Ok(());
     }
 
-    let addon = list_installed(tree, luarocks_path, None)?
+    let addon = list_installed(tree, luarocks_path, Some(name))?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
@@ -519,7 +519,7 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
         return Ok(());
     }
 
-    let addon = list_installed(tree, luarocks_path, None)?
+    let addon = list_installed(tree, luarocks_path, Some(name))?
         .into_iter()
         .find(|addon| addon.name == name)
         .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
