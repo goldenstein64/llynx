@@ -448,16 +448,6 @@ fn get_remove_command(
 
 /// forward uninstalling to LuaRocks
 fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    #[cfg(feature = "disable_before_remove")]
-    if list_enabled(None)?
-        .into_iter()
-        .any(|addon| addon.name == name)
-    {
-        // disable it first
-        disable(tree, SETTINGS_FILE, name)
-            .with_context(|| format!("error while disabling addon '{name}' before uninstalling"))?;
-    }
-
     execute_command(get_remove_command(tree, luarocks_path, name, version)?)
 }
 
@@ -592,6 +582,13 @@ fn main() -> Result<()> {
             }
             Action::Remove { name, version } => {
                 let version = version.as_ref().map(String::as_str);
+                #[cfg(feature = "disable_before_remove")]
+                {
+                    log::info!("disabling '{name}' first...");
+                    disable(&tree, &luarocks, &settings, &name).with_context(|| {
+                        anyhow!("error when disabling '{name}' before uninstalling")
+                    })?;
+                }
                 remove(&tree, &luarocks, &name, version)?;
             }
             Action::Enable { name } => enable(&tree, &luarocks, &settings, &name)?,
