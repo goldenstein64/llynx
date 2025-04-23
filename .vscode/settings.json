@@ -1,4 +1,4 @@
 {
   "editor.formatOnSave": true,
-  "cSpell.words": ["LUAROCKS"]
+  "cSpell.words": ["cjson", "LUAROCKS", "rockspec", "stderrlog"]
 }
