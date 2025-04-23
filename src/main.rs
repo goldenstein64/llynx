@@ -53,21 +53,17 @@ impl Default for VSCodeSettings {
 struct AggregateError(Vec<anyhow::Error>);
 
 impl AggregateError {
-    pub fn from_results<T: fmt::Debug>(
-        results: impl Iterator<Item = Result<T>>,
-    ) -> Result<Vec<T>, anyhow::Error> {
+    pub fn from_results<T: fmt::Debug>(results: impl Iterator<Item = Result<T>>) -> Result<Vec<T>> {
         let (oks, errs) =
             results.partition::<Vec<Result<T>>, fn(&Result<T>) -> bool>(|result| result.is_ok());
-        if errs.len() > 1 {
-            Err(AggregateError(errs.into_iter().map(|err| err.unwrap_err()).collect()).into())
-        } else if !errs.is_empty() {
-            Err(errs
+        match errs.len() {
+            0 => Ok(oks.into_iter().map(|ok| ok.unwrap()).collect()),
+            1 => Err(errs
                 .into_iter()
                 .nth(0)
                 .expect("errs is non-empty")
-                .expect_err("result was partitioned into an err"))
-        } else {
-            Ok(oks.into_iter().map(|ok| ok.unwrap()).collect())
+                .expect_err("result was partitioned into an err")),
+            _ => Err(AggregateError(errs.into_iter().map(|err| err.unwrap_err()).collect()).into()),
         }
     }
 }
