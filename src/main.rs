@@ -515,7 +515,7 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
         .into_iter()
         .any(|addon| addon.name != name)
     {
-        log::warn!("addon '{name}' is not installed");
+        log::warn!("addon '{name}' is not enabled");
         return Ok(());
     }
 
