@@ -14,8 +14,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use jsonc_parser::{ParseOptions, parse_to_serde_value};
 use serde::{Deserialize, Serialize};
 use std::{
-    env, fmt,
-    fs::{self},
+    env, fmt, fs,
     io::{self, Cursor, Write},
     iter,
     path::{Path, PathBuf},
@@ -636,6 +635,9 @@ static LUA_CJSON_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon 
         "tests\\.lls_addons\\lib\\luarocks\\rocks-5.1\\lua-cjson\\2.1.0.9-1\\types",
     )),
 });
+
+#[cfg(test)]
+mod test_list_online {}
 
 #[cfg(test)]
 mod test_list_installed {
