@@ -438,18 +438,18 @@ fn get_install_command(
     luarocks_path: &str,
     name: &str,
     version: Option<&str>,
-) -> Result<Command> {
+) -> Command {
     let mut command = Command::new(luarocks_path);
     command.args(["--tree", tree, "install", name]);
     if let Some(ver) = version {
         command.arg(ver);
     }
-    Ok(command)
+    command
 }
 
 /// forward installing to LuaRocks
 fn install(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    execute_command(get_install_command(tree, luarocks_path, name, version)?)
+    execute_command(get_install_command(tree, luarocks_path, name, version))
 }
 
 fn get_remove_command(
@@ -457,18 +457,18 @@ fn get_remove_command(
     luarocks_path: &str,
     name: &str,
     version: Option<&str>,
-) -> Result<Command> {
+) -> Command {
     let mut command = Command::new(luarocks_path);
     command.args(["--tree", tree, "remove", name]);
     if let Some(ver) = version {
         command.arg(ver);
     }
-    Ok(command)
+    command
 }
 
 /// forward uninstalling to LuaRocks
 fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    execute_command(get_remove_command(tree, luarocks_path, name, version)?)
+    execute_command(get_remove_command(tree, luarocks_path, name, version))
 }
 
 /// read from a settings file and write to it again
