@@ -21,10 +21,13 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use toml;
 
 #[cfg(test)]
 use std::sync::LazyLock;
 
+const CONFIG_PATH: &str = ".llynx.toml";
+const LUAROCKS_PATH: &str = "luarocks";
 const ADDONS_DIR: &str = ".lls_addons";
 const LUAROCKS_ENDPOINT: &str = "https://luarocks.org/m/lls-addons";
 const SETTINGS_FILE: &str = ".vscode/settings.json";
@@ -46,6 +49,27 @@ impl Default for VSCodeSettings {
             rest: serde_json::Map::new(),
         }
     }
+}
+
+#[derive(Deserialize, Debug)]
+struct MaybeConfig {
+    #[allow(dead_code)]
+    #[serde(rename = "$schema")]
+    schema: Option<String>,
+    luarocks: Option<String>,
+    tree: Option<String>,
+    settings: Option<String>,
+    server: Option<String>,
+    verbose: Option<u8>,
+}
+
+#[derive(Debug)]
+struct Config {
+    luarocks: String,
+    tree: String,
+    settings: String,
+    server: String,
+    verbose: u8,
 }
 
 /// error type for showing multiple errors
@@ -95,11 +119,11 @@ struct Addon {
 #[command(long_about = None)]
 struct Cli {
     /// configuration file for specifying frequently used flags
-    #[arg(short, long, value_name = "file-path", conflicts_with_all = ["luarocks", "tree", "settings", "server"])]
-    config: Option<String>,
+    #[arg(short, long, value_name = "file-path", default_value = CONFIG_PATH, conflicts_with_all = ["luarocks", "tree", "settings", "server"])]
+    config: String,
 
     /// Set the path to the LuaRocks executable
-    #[arg(short, long, value_name = "file-path", default_value = "luarocks")]
+    #[arg(short, long, value_name = "file-path", default_value = LUAROCKS_PATH)]
     luarocks: String,
 
     /// Set a custom rocks tree directory
@@ -543,15 +567,42 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
 }
 
 fn main() -> Result<()> {
-    let Cli {
-        config: _,
+    let cli = Cli::parse();
+    let command = cli.command;
+
+    let Config {
         luarocks,
-        settings,
         tree,
+        settings,
         server,
         verbose,
-        command,
-    } = Cli::parse();
+    } = match fs::read_to_string(&cli.config) {
+        Ok(contents) => {
+            let maybe_config = toml::from_str::<MaybeConfig>(&contents)
+                .with_context(|| format!("error parsing config file '{}'", cli.config))?;
+            Config {
+                luarocks: maybe_config.luarocks.unwrap_or(cli.luarocks),
+                tree: maybe_config.tree.unwrap_or(cli.tree),
+                settings: maybe_config.settings.unwrap_or(cli.settings),
+                server: maybe_config.server.unwrap_or(cli.server),
+                verbose: maybe_config.verbose.unwrap_or(cli.verbose),
+            }
+        }
+        Err(err) => {
+            log::info!(
+                "failed to read config file '{}', using defaults...",
+                cli.config
+            );
+            log::debug!("{err}");
+            Config {
+                luarocks: cli.luarocks,
+                tree: cli.tree,
+                settings: cli.settings,
+                server: cli.server,
+                verbose: cli.verbose,
+            }
+        }
+    };
 
     stderrlog::new()
         .timestamp(stderrlog::Timestamp::Off)
