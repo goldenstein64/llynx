@@ -505,7 +505,7 @@ fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> R
         .into_iter()
         .any(|addon| addon.name == name)
     {
-        log::warn!("addon '{name}' is already installed");
+        log::warn!("addon '{name}' is already enabled");
         return Ok(());
     }
 
