@@ -23,7 +23,7 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -c, --config <file-path>    configuration file for specifying frequently used flags
+  -c, --config <file-path>    configuration file for specifying frequently used flags [default: .llynx.toml]
   -l, --luarocks <file-path>  Set the path to the LuaRocks executable [default: luarocks]
   -t, --tree <dir-path>       Set a custom rocks tree directory [default: .lls_addons]
       --settings <file-path>  Modify this settings file [default: .vscode/settings.json]
