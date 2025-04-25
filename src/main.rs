@@ -433,42 +433,24 @@ fn execute_command(mut command: Command) -> Result<()> {
     Ok(())
 }
 
-fn get_install_command(
-    tree: &str,
-    luarocks_path: &str,
-    name: &str,
-    version: Option<&str>,
-) -> Command {
-    let mut command = Command::new(luarocks_path);
-    command.args(["--tree", tree, "install", name]);
-    if let Some(ver) = version {
-        command.arg(ver);
-    }
-    command
-}
-
 /// forward installing to LuaRocks
 fn install(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    execute_command(get_install_command(tree, luarocks_path, name, version))
-}
-
-fn get_remove_command(
-    tree: &str,
-    luarocks_path: &str,
-    name: &str,
-    version: Option<&str>,
-) -> Command {
-    let mut command = Command::new(luarocks_path);
-    command.args(["--tree", tree, "remove", name]);
+    let mut install_command = Command::new(luarocks_path);
+    install_command.args(["--tree", tree, "install", name]);
     if let Some(ver) = version {
-        command.arg(ver);
+        install_command.arg(ver);
     }
-    command
+    execute_command(install_command)
 }
 
 /// forward uninstalling to LuaRocks
 fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    execute_command(get_remove_command(tree, luarocks_path, name, version))
+    let mut remove_command = Command::new(luarocks_path);
+    remove_command.args(["--tree", tree, "remove", name]);
+    if let Some(ver) = version {
+        remove_command.arg(ver);
+    }
+    execute_command(remove_command)
 }
 
 /// read from a settings file and write to it again
