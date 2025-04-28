@@ -2,7 +2,7 @@
 
 > [!WARNING]
 >
-> This project is still in early development! Pretty much everything is untested. Bug reports are appreciated!
+> This project is still in early development! Tests are only halfway there. Bug reports are appreciated!
 
 a thin [LuaRocks](https://luarocks.org/) wrapper intended for installing addons for [Lua Language Server](https://github.com/LuaLS/lua-language-server)
 
