@@ -499,10 +499,7 @@ fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) ->
 }
 
 /// read from a settings file and write to it again
-fn update_library(
-    settings_file: &str,
-    f: impl FnOnce(Vec<String>) -> Result<Vec<String>>,
-) -> Result<()> {
+fn update_library(settings_file: &str, f: impl FnOnce(Vec<String>) -> Vec<String>) -> Result<()> {
     let contents = match fs::read_to_string(settings_file) {
         Err(source) => match source.kind() {
             io::ErrorKind::NotFound => String::new(),
@@ -519,11 +516,38 @@ fn update_library(
             .with_context(|| format!("while compiling '{settings_file}'"))?,
     };
 
-    vscode_settings.library = Some(f(vscode_settings.library.unwrap_or_default())?);
+    vscode_settings.library = Some(f(vscode_settings.library.unwrap_or_default()));
 
     let new_contents: String = serde_json::to_string(&vscode_settings)?;
     fs::write(settings_file, new_contents)?;
     Ok(())
+}
+
+fn get_addon_path(tree: &str, luarocks_path: &str, name: &str) -> Result<String> {
+    let addon = list_installed(tree, luarocks_path, Some(name))?
+        .into_iter()
+        .find(|addon| addon.name == name)
+        .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
+
+    let location = addon
+        .location
+        .expect("installed addons always have a location");
+
+    let path = Path::new(&location);
+    let types_path = path.join("types");
+    types_path
+        .into_os_string()
+        .into_string()
+        .map_err(|os_str| anyhow!("string {os_str:?} is not valid UTF-8"))
+}
+
+fn enable_in_library(path: String) -> impl FnOnce(Vec<String>) -> Vec<String> {
+    move |library| {
+        library
+            .into_iter()
+            .chain(iter::once(path)) // append this path to the end
+            .collect()
+    }
 }
 
 /// add the addon to .vscode/settings.json
@@ -536,28 +560,12 @@ fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> R
         return Ok(());
     }
 
-    let addon = list_installed(tree, luarocks_path, Some(name))?
-        .into_iter()
-        .find(|addon| addon.name == name)
-        .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
+    let addon_to_enable = get_addon_path(tree, luarocks_path, name)?;
+    update_library(settings_file, enable_in_library(addon_to_enable))
+}
 
-    let location = addon
-        .location
-        .expect("installed addons always have a location");
-
-    let path = Path::new(&location);
-    let types_path = path.join("types");
-    let types_path_string = types_path
-        .into_os_string()
-        .into_string()
-        .map_err(|os_str| anyhow!("string {os_str:?} contains invalid Unicode data"))?;
-
-    update_library(settings_file, |library| {
-        Ok(library
-            .into_iter()
-            .chain(iter::once(types_path_string))
-            .collect())
-    })
+fn disable_in_library(path: &str) -> impl FnOnce(Vec<String>) -> Vec<String> {
+    move |library| library.into_iter().filter(|loc| loc != path).collect()
 }
 
 /// remove the addon from .vscode/settings.json
@@ -570,27 +578,8 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
         return Ok(());
     }
 
-    let addon = list_installed(tree, luarocks_path, Some(name))?
-        .into_iter()
-        .find(|addon| addon.name == name)
-        .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
-
-    let location = addon
-        .location
-        .expect("installed addons always have a location");
-
-    let path = Path::new(&location);
-    let types_path = path.join("types");
-    let types_path_str = types_path
-        .to_str()
-        .ok_or_else(|| anyhow!("addon location is not valid UTF-8"))?;
-
-    update_library(settings_file, |library| {
-        Ok(library
-            .into_iter()
-            .filter(|loc| loc != types_path_str)
-            .collect())
-    })
+    let addon_to_disable = get_addon_path(tree, luarocks_path, name)?;
+    update_library(settings_file, disable_in_library(&addon_to_disable))
 }
 
 fn main() -> Result<()> {
