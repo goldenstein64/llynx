@@ -9,17 +9,17 @@
 // Assumptions:
 // - Only one version of an addon can be enabled at any time
 
-use anyhow::{Context, Result, anyhow};
+mod enabled;
+mod installed;
+mod online;
+
+use crate::enabled::{disable, enable, list_enabled};
+use crate::installed::{install, list_installed, remove};
+use crate::online::list_online;
+use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
-use jsonc_parser::{ParseOptions, parse_to_serde_value};
-use serde::{Deserialize, Serialize};
-use std::{
-    env, fmt, fs,
-    io::{self, Cursor, Write},
-    iter,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use serde::Deserialize;
+use std::{fs, io};
 use toml;
 
 #[cfg(test)]
@@ -31,24 +31,6 @@ const ADDONS_DIR: &str = ".lls_addons";
 const LUAROCKS_ENDPOINT: &str = "https://luarocks.org/m/lls-addons";
 const SETTINGS_FILE: &str = ".vscode/settings.json";
 const LIB_SETTINGS_KEY: &str = "Lua.workspace.library";
-
-#[derive(Debug, Serialize, Deserialize)]
-struct VSCodeSettings {
-    #[serde(rename = "Lua.workspace.library")]
-    library: Option<Vec<String>>,
-
-    #[serde(flatten)]
-    rest: serde_json::Map<String, serde_json::Value>,
-}
-
-impl Default for VSCodeSettings {
-    fn default() -> Self {
-        VSCodeSettings {
-            library: None,
-            rest: serde_json::Map::new(),
-        }
-    }
-}
 
 #[derive(Deserialize, Debug)]
 struct MaybeConfig {
@@ -116,41 +98,6 @@ impl Config {
             server: server.unwrap_or(self.server),
             verbose: verbose.unwrap_or(self.verbose),
         }
-    }
-}
-
-/// error type for showing multiple errors
-#[derive(Debug)]
-struct AggregateError(Vec<anyhow::Error>);
-
-impl AggregateError {
-    pub fn from_results<T: fmt::Debug>(results: impl Iterator<Item = Result<T>>) -> Result<Vec<T>> {
-        let (oks, errs) =
-            results.partition::<Vec<Result<T>>, fn(&Result<T>) -> bool>(|result| result.is_ok());
-        match errs.len() {
-            0 => Ok(oks.into_iter().map(|ok| ok.unwrap()).collect()),
-            1 => Err(errs
-                .into_iter()
-                .nth(0)
-                .expect("errs is non-empty")
-                .expect_err("result was partitioned into an err")),
-            _ => Err(AggregateError(errs.into_iter().map(|err| err.unwrap_err()).collect()).into()),
-        }
-    }
-}
-
-impl fmt::Display for AggregateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for source in &self.0 {
-            writeln!(f, "{source}")?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for AggregateError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(self.0[0].as_ref())
     }
 }
 
@@ -246,197 +193,6 @@ enum Action {
     },
 }
 
-/// fetches from .vscode/settings.json
-fn list_enabled(tree: &str, settings_file: &str, filter: Option<&str>) -> Result<Vec<Addon>> {
-    let contents = match fs::read_to_string(settings_file) {
-        Err(source) => match source.kind() {
-            io::ErrorKind::NotFound => {
-                log::warn!("file '{settings_file}' was not found. Assuming empty...");
-                return Ok(vec![]);
-            }
-            _ => return Err(source).with_context(|| format!("while reading '{settings_file}'")),
-        },
-        Ok(contents) => contents,
-    };
-
-    let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
-        .with_context(|| format!("while parsing '{settings_file}'"))?;
-    let value_parsed = match maybe_value_parsed {
-        None => {
-            log::warn!("file '{settings_file}' is empty. Assuming empty...");
-            return Ok(vec![]);
-        }
-        Some(vscode_settings_parsed) => vscode_settings_parsed,
-    };
-
-    let vscode_settings = serde_json::from_value::<VSCodeSettings>(value_parsed)
-        .with_context(|| format!("while compiling '{settings_file}'"))?;
-
-    let library = match vscode_settings.library {
-        None => {
-            log::warn!("key '{LIB_SETTINGS_KEY}' not found. Assuming empty...");
-            return Ok(vec![]);
-        }
-        Some(lib) => lib,
-    };
-
-    let addons_matcher = format!("{tree}/lib/luarocks");
-
-    let addons_unfiltered: Vec<Addon> = AggregateError::from_results(
-        library
-            .into_iter()
-            .map(|s| s)
-            .filter(|s| {
-                let path = Path::new(s);
-                path.is_relative() && path.starts_with(&addons_matcher) && path.ends_with("types")
-            })
-            .map(|s| {
-                let path = Path::new(&s);
-                // we start at 'types', meaning the version is its parent
-                let version = path.parent().expect("path has at least two parents");
-                // which is a child of the rock name
-                let name = version.parent().expect("path has at least one parent");
-                Ok(Addon {
-                    name: name
-                        .file_name()
-                        .expect("directory starts with addons_matcher")
-                        .to_str()
-                        .ok_or(anyhow!("version directory is not valid UTF-8"))?
-                        .to_string(),
-                    version: version
-                        .file_name()
-                        .expect("directory starts with addons_matcher")
-                        .to_str()
-                        .ok_or(anyhow!("version directory is not valid UTF-8"))?
-                        .to_string(),
-                    location: Some(s),
-                })
-            }),
-    )?;
-
-    let addons = match filter {
-        Some(fil) => addons_unfiltered
-            .into_iter()
-            .filter(|addon: &Addon| addon.name.contains(&fil))
-            .collect(),
-        None => addons_unfiltered,
-    };
-
-    Ok(addons)
-}
-
-#[derive(Debug, Deserialize)]
-struct InstalledAddonRecord {
-    pub name: String,
-    pub version: String,
-
-    #[allow(dead_code)]
-    pub status: String,
-
-    pub location: String,
-}
-
-/// fetches from the .lls_addons tree
-fn list_installed(tree: &str, luarocks_path: &str, filter: Option<&str>) -> Result<Vec<Addon>> {
-    let mut luarocks = Command::new(luarocks_path);
-    luarocks.args(["--tree", tree, "list", "--porcelain"]);
-    if let Some(fil) = filter {
-        luarocks.arg(fil);
-    }
-    log::info!("executing: {luarocks:?}");
-
-    let output = luarocks.output().context("while executing luarocks")?;
-
-    let stdout = std::str::from_utf8(&output.stdout).context("while decoding luarocks output")?;
-
-    // because the CSV reader only reads files, a Cursor represents the string's
-    // file handle
-    // https://stackoverflow.com/a/41069910/13221687
-    let cursor = Cursor::new(stdout.as_bytes());
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .delimiter(b'\t')
-        .from_reader(cursor);
-
-    let cwd = env::current_dir()?;
-
-    let addons = reader
-        .deserialize::<InstalledAddonRecord>()
-        .into_iter()
-        .map(|row| row.expect("interpreting LuaRocks output"))
-        .map(|record| {
-            let name = record.name;
-            let version = record.version;
-            let location = record.location;
-            let mut path = PathBuf::from(location);
-            path.push(&name);
-            path.push(&version);
-            path.push("types");
-            let relative_path = path.strip_prefix(&cwd).unwrap_or(&path);
-            Addon {
-                name,
-                version,
-                location: Some(
-                    relative_path
-                        .to_str()
-                        .expect("path is not UTF-8")
-                        .to_string(),
-                ),
-            }
-        })
-        .collect();
-
-    Ok(addons)
-}
-
-#[derive(Debug, Deserialize)]
-struct OnlineAddonRecord {
-    pub name: String,
-    pub version: String,
-    pub file_type: String,
-
-    #[allow(dead_code)]
-    pub source: String,
-}
-/// fetches from luarocks.org
-fn list_online(server: &str, luarocks_path: &str, filter: Option<&str>) -> Result<Vec<Addon>> {
-    let mut luarocks = Command::new(luarocks_path);
-    luarocks.args([
-        "--only-server",
-        server,
-        "search",
-        "--porcelain",
-        filter.unwrap_or("--all"),
-    ]);
-    log::info!("executing: {luarocks:?}");
-
-    let output = luarocks.output().context("while executing luarocks")?;
-    let stdout = std::str::from_utf8(&output.stdout).context("while decoding luarocks output")?;
-
-    // because the CSV reader only reads files, a Cursor represents the string's
-    // file handle
-    // https://stackoverflow.com/a/41069910/13221687
-    let cursor = Cursor::new(stdout.as_bytes());
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .delimiter(b'\t')
-        .from_reader(cursor);
-
-    let addons = reader
-        .deserialize::<OnlineAddonRecord>()
-        .into_iter()
-        .map(|row| row.expect("interpreting LuaRocks output"))
-        .filter(|record| record.file_type == "rockspec")
-        .map(|record| Addon {
-            name: record.name,
-            version: record.version,
-            location: None,
-        })
-        .collect();
-
-    Ok(addons)
-}
-
 fn print_addons_list(mut addons: Vec<Addon>) -> () {
     if addons.is_empty() {
         log::error!("no addons found matching criteria");
@@ -453,133 +209,6 @@ fn print_addons_list(mut addons: Vec<Addon>) -> () {
         }
         println!("\t{}", addon.version);
     }
-}
-
-fn execute_command(mut command: Command) -> Result<()> {
-    log::info!("executing: {command:?}");
-
-    let result_output = command.output();
-    match result_output {
-        Ok(output) => {
-            io::stdout()
-                .write_all(&output.stdout)
-                .context("while writing out stdout")?;
-            io::stderr()
-                .write_all(&output.stderr)
-                .context("while writing to stderr")?;
-        }
-        Err(err) => {
-            io::stderr()
-                .write_all(format!("{err}").as_bytes())
-                .context("while writing to stderr")?;
-        }
-    }
-
-    Ok(())
-}
-
-/// forward installing to LuaRocks
-fn install(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    let mut install_command = Command::new(luarocks_path);
-    install_command.args(["--tree", tree, "install", name]);
-    if let Some(ver) = version {
-        install_command.arg(ver);
-    }
-    execute_command(install_command)
-}
-
-/// forward uninstalling to LuaRocks
-fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
-    let mut remove_command = Command::new(luarocks_path);
-    remove_command.args(["--tree", tree, "remove", name]);
-    if let Some(ver) = version {
-        remove_command.arg(ver);
-    }
-    execute_command(remove_command)
-}
-
-/// read from a settings file and write to it again
-fn update_library(settings_file: &str, f: impl FnOnce(Vec<String>) -> Vec<String>) -> Result<()> {
-    let contents = match fs::read_to_string(settings_file) {
-        Err(source) => match source.kind() {
-            io::ErrorKind::NotFound => String::new(),
-            _ => return Err(source).with_context(|| format!("while reading '{settings_file}'")),
-        },
-        Ok(contents) => contents,
-    };
-
-    let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
-        .with_context(|| format!("while parsing '{settings_file}'"))?;
-    let mut vscode_settings = match maybe_value_parsed {
-        None => VSCodeSettings::default(),
-        Some(value_parsed) => serde_json::from_value::<VSCodeSettings>(value_parsed)
-            .with_context(|| format!("while compiling '{settings_file}'"))?,
-    };
-
-    vscode_settings.library = Some(f(vscode_settings.library.unwrap_or_default()));
-
-    let new_contents: String = serde_json::to_string(&vscode_settings)?;
-    fs::write(settings_file, new_contents)?;
-    Ok(())
-}
-
-fn get_addon_path(tree: &str, luarocks_path: &str, name: &str) -> Result<String> {
-    let addon = list_installed(tree, luarocks_path, Some(name))?
-        .into_iter()
-        .find(|addon| addon.name == name)
-        .ok_or_else(|| anyhow!("addon '{name}' is not installed"))?;
-
-    let location = addon
-        .location
-        .expect("installed addons always have a location");
-
-    let path = Path::new(&location);
-    let types_path = path.join("types");
-    types_path
-        .into_os_string()
-        .into_string()
-        .map_err(|os_str| anyhow!("string {os_str:?} is not valid UTF-8"))
-}
-
-fn enable_in_library(path: String) -> impl FnOnce(Vec<String>) -> Vec<String> {
-    move |library| {
-        library
-            .into_iter()
-            .chain(iter::once(path)) // append this path to the end
-            .collect()
-    }
-}
-
-/// add the addon to .vscode/settings.json
-fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(tree, settings_file, Some(name))?
-        .into_iter()
-        .any(|addon| addon.name == name)
-    {
-        log::info!("addon '{name}' is already enabled");
-        return Ok(());
-    }
-
-    let addon_to_enable = get_addon_path(tree, luarocks_path, name)?;
-    update_library(settings_file, enable_in_library(addon_to_enable))
-}
-
-fn disable_in_library(path: &str) -> impl FnOnce(Vec<String>) -> Vec<String> {
-    move |library| library.into_iter().filter(|loc| loc != path).collect()
-}
-
-/// remove the addon from .vscode/settings.json
-fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(tree, settings_file, Some(name))?
-        .into_iter()
-        .any(|addon| addon.name != name)
-    {
-        log::info!("addon '{name}' is already disabled");
-        return Ok(());
-    }
-
-    let addon_to_disable = get_addon_path(tree, luarocks_path, name)?;
-    update_library(settings_file, disable_in_library(&addon_to_disable))
 }
 
 fn main() -> Result<()> {
@@ -767,32 +396,5 @@ mod test_list_enabled {
         )
         .unwrap();
         assert_eq!(addons, vec![SAY_ADDON.clone()])
-    }
-}
-
-#[cfg(test)]
-mod test_enable {
-    use super::*;
-
-    #[test]
-    fn add_from_empty() {
-        let library: Vec<String> = vec![];
-        let new_path = String::from(SAY_ADDON_LOCATION);
-        let func = enable_in_library(new_path);
-        let new_library = func(library);
-        assert_eq!(new_library, vec![String::from(SAY_ADDON_LOCATION)]);
-    }
-}
-
-#[cfg(test)]
-mod test_disable {
-    use super::*;
-
-    #[test]
-    fn remove_from_one() {
-        let library = vec![String::from(SAY_ADDON_LOCATION)];
-        let func = disable_in_library(SAY_ADDON_LOCATION);
-        let new_library = func(library);
-        assert_eq!(new_library, vec![] as Vec<String>);
     }
 }
