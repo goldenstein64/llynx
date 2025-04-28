@@ -678,18 +678,18 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
-static LUA_CJSON_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon {
-    name: String::from("lua-cjson"),
-    version: String::from("2.1.0.9-1"),
+static SAY_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon {
+    name: String::from("say"),
+    version: String::from("1.4.1-3"),
     location: Some(String::from(
-        "tests\\trees\\one_addon\\lib\\luarocks\\rocks-5.1\\lua-cjson\\2.1.0.9-1\\types",
+        "tests\\trees\\one_addon\\lib\\luarocks\\rocks-5.1\\say\\1.4.1-3\\types",
     )),
 });
 
 #[cfg(test)]
-static ONLINE_LUA_CJSON_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon {
-    name: String::from("lua-cjson"),
-    version: String::from("2.1.0.9-1"),
+static ONLINE_SAY_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon {
+    name: String::from("say"),
+    version: String::from("1.4.1-3"),
     location: None,
 });
 
@@ -699,23 +699,14 @@ mod test_list_online {
 
     #[test]
     fn one_addon() {
-        let addons = list_online(
-            "file://./tests/servers/one_addon",
-            "luarocks",
-            Some("lua-cjson"),
-        )
-        .unwrap();
-        assert_eq!(addons, vec![ONLINE_LUA_CJSON_ADDON.clone()]);
+        let addons =
+            list_online("file://./tests/servers/one_addon", "luarocks", Some("say")).unwrap();
+        assert_eq!(addons, vec![ONLINE_SAY_ADDON.clone()]);
     }
 
     #[test]
     fn empty() {
-        let addons = list_online(
-            "file://./tests/servers/empty",
-            "luarocks",
-            Some("lua-cjson"),
-        )
-        .unwrap();
+        let addons = list_online("file://./tests/servers/empty", "luarocks", Some("say")).unwrap();
         assert_eq!(addons, vec![]);
     }
 }
@@ -727,7 +718,7 @@ mod test_list_installed {
     #[test]
     fn one_addon() {
         let addons = list_installed("tests/trees/one_addon", "luarocks", None).unwrap();
-        assert_eq!(addons, vec![LUA_CJSON_ADDON.clone()]);
+        assert_eq!(addons, vec![SAY_ADDON.clone()]);
     }
 }
 
@@ -779,6 +770,6 @@ mod test_list_enabled {
             None,
         )
         .unwrap();
-        assert_eq!(addons, vec![LUA_CJSON_ADDON.clone()])
+        assert_eq!(addons, vec![SAY_ADDON.clone()])
     }
 }
