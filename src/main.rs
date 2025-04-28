@@ -441,7 +441,7 @@ fn list_online(server: &str, luarocks_path: &str, filter: Option<&str>) -> Resul
 
 fn print_addons_list(mut addons: Vec<Addon>) -> () {
     if addons.is_empty() {
-        log::warn!("no addons found matching criteria");
+        log::error!("no addons found matching criteria");
         return;
     }
     addons.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
