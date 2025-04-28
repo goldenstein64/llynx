@@ -23,11 +23,11 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -c, --config <file-path>    configuration file for specifying frequently used flags [default: .llynx.toml]
-  -l, --luarocks <file-path>  Set the path to the LuaRocks executable [default: luarocks]
-  -t, --tree <dir-path>       Set a custom rocks tree directory [default: .lls_addons]
-      --settings <file-path>  Modify this settings file [default: .vscode/settings.json]
-      --server <url>          Make LuaRocks look for addons in this server only [default: https://luarocks.org/m/lls-addons]
+  -c, --config <file-path>    configuration file for specifying frequently used flags. Defaults to ".llynx.toml"
+  -l, --luarocks <file-path>  Set the path to the LuaRocks executable. Looks on PATH by default
+  -t, --tree <dir-path>       Set a custom rocks tree directory. Defaults to "./.lls_addons"
+      --settings <file-path>  Modify this settings file. Defaults to "./.vscode/settings.json"
+      --server <url>          Make LuaRocks look for addons in this server first. Defaults to "https://luarocks.org/m/lls-addons"
   -v...                       Increase verbosity; can be repeated
   -h, --help                  Print help
 ```
