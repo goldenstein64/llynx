@@ -552,7 +552,7 @@ fn enable_in_library(path: String) -> impl FnOnce(Vec<String>) -> Vec<String> {
 
 /// add the addon to .vscode/settings.json
 fn enable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(tree, settings_file, None)?
+    if list_enabled(tree, settings_file, Some(name))?
         .into_iter()
         .any(|addon| addon.name == name)
     {
@@ -570,7 +570,7 @@ fn disable_in_library(path: &str) -> impl FnOnce(Vec<String>) -> Vec<String> {
 
 /// remove the addon from .vscode/settings.json
 fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> Result<()> {
-    if list_enabled(tree, settings_file, None)?
+    if list_enabled(tree, settings_file, Some(name))?
         .into_iter()
         .any(|addon| addon.name != name)
     {
