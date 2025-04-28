@@ -178,11 +178,11 @@ struct Cli {
     tree: Option<String>,
 
     /// Modify this settings file. Defaults to "./.vscode/settings.json"
-    #[arg(long, value_name = "file-path", default_value = SETTINGS_FILE)]
+    #[arg(long, value_name = "file-path")]
     settings: Option<String>,
 
     /// Make LuaRocks look for addons in this server first. Defaults to "https://luarocks.org/m/lls-addons"
-    #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
+    #[arg(long, value_name = "url")]
     server: Option<String>,
 
     /// Increase verbosity; can be repeated
