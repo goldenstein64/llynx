@@ -61,28 +61,32 @@ impl From<&Cli> for MaybeConfig {
 }
 
 #[derive(Debug)]
-struct Config {
-    luarocks: String,
-    tree: String,
-    settings: String,
-    server: String,
+struct Config<'a> {
+    luarocks: &'a str,
+    tree: &'a str,
+    settings: &'a str,
+    server: &'a str,
     verbose: u8,
 }
 
-impl Default for Config {
+impl<'a> Default for Config<'a> {
     fn default() -> Self {
         Config {
-            luarocks: String::from(LUAROCKS_PATH),
-            tree: String::from(ADDONS_DIR),
-            settings: String::from(SETTINGS_FILE),
-            server: String::from(LUAROCKS_ENDPOINT),
+            luarocks: LUAROCKS_PATH,
+            tree: ADDONS_DIR,
+            settings: SETTINGS_FILE,
+            server: LUAROCKS_ENDPOINT,
             verbose: 0,
         }
     }
 }
 
-impl Config {
-    fn extend(self, maybe_config: MaybeConfig) -> Self {
+impl<'a> Config<'a> {
+    fn extend<'b: 'a>(self, maybe_config: &'b MaybeConfig) -> Self {
+        fn choose_str<'a>(try_str: &'a Option<String>, otherwise: &'a str) -> &'a str {
+            try_str.as_ref().map(String::as_str).unwrap_or(otherwise)
+        }
+
         let MaybeConfig {
             schema: _,
             luarocks,
@@ -92,10 +96,10 @@ impl Config {
             verbose,
         } = maybe_config;
         Config {
-            luarocks: luarocks.unwrap_or(self.luarocks),
-            tree: tree.unwrap_or(self.tree),
-            settings: settings.unwrap_or(self.settings),
-            server: server.unwrap_or(self.server),
+            luarocks: choose_str(luarocks, self.luarocks),
+            tree: choose_str(tree, self.tree),
+            settings: choose_str(settings, self.settings),
+            server: choose_str(server, self.server),
             verbose: verbose.unwrap_or(self.verbose),
         }
     }
@@ -211,48 +215,59 @@ fn print_addons_list(mut addons: Vec<Addon>) -> () {
     }
 }
 
+fn get_cli_config_file_overrides(path: &str) -> Result<MaybeConfig> {
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("while opening config file '{path}'"))?;
+    toml::from_str::<MaybeConfig>(&contents)
+        .with_context(|| format!("while parsing config file '{path}'"))
+}
+
+fn get_default_config_file_overrides() -> Option<Result<MaybeConfig>> {
+    match fs::read_to_string(CONFIG_PATH) {
+        Err(err) => match err.kind() {
+            io::ErrorKind::NotFound => {
+                log::debug!("default config file not found, using defaults...");
+                None
+            }
+            _ => Some(
+                Err(anyhow::Error::from(err))
+                    .with_context(|| format!("while opening config file '{CONFIG_PATH}'")),
+            ),
+        },
+        Ok(contents) => Some(
+            toml::from_str::<MaybeConfig>(&contents)
+                .with_context(|| format!("while parsing config file '{CONFIG_PATH}'")),
+        ),
+    }
+}
+
+fn get_file_overrides(path: Option<&str>) -> Result<Option<MaybeConfig>> {
+    path.map(get_cli_config_file_overrides)
+        .or_else(get_default_config_file_overrides)
+        .transpose()
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // config should be calculated like this:
-    // CLI args -> Config arg -> defaults
+    // (CLI args) overrides (Config args) overrides (defaults)
     let default_config = Config::default();
+    let file_overrides: Option<MaybeConfig> =
+        get_file_overrides(cli.config.as_ref().map(String::as_str))?;
     let cli_overrides = MaybeConfig::from(&cli);
+
     let Config {
         luarocks,
         tree,
         settings,
         server,
         verbose,
-    } = match cli.config {
-        None => {
-            log::debug!("config file not given, attempting to read from '{CONFIG_PATH}'...");
-            match fs::read_to_string(CONFIG_PATH) {
-                Err(err) => match err.kind() {
-                    io::ErrorKind::NotFound => {
-                        log::debug!("default config file not found, using defaults...");
-                        default_config.extend(cli_overrides)
-                    }
-                    _ => {
-                        return Err(anyhow::Error::from(err))
-                            .with_context(|| format!("while opening config file '{CONFIG_PATH}'"));
-                    }
-                },
-                Ok(contents) => {
-                    let maybe_config = toml::from_str::<MaybeConfig>(&contents)
-                        .with_context(|| format!("while parsing config file '{CONFIG_PATH}'"))?;
-                    default_config.extend(maybe_config).extend(cli_overrides)
-                }
-            }
-        }
-        Some(config_path) => {
-            let contents = fs::read_to_string(&config_path)
-                .with_context(|| format!("while opening config file '{config_path}'"))?;
-            let maybe_config = toml::from_str::<MaybeConfig>(&contents)
-                .with_context(|| format!("while parsing config file '{config_path}'"))?;
-            default_config.extend(maybe_config).extend(cli_overrides)
-        }
-    };
+    } = match file_overrides {
+        Some(ref overrides) => default_config.extend(overrides),
+        None => default_config,
+    }
+    .extend(&cli_overrides);
 
     stderrlog::new()
         .timestamp(stderrlog::Timestamp::Off)
@@ -265,9 +280,9 @@ fn main() -> Result<()> {
             Action::List { source, filter } => {
                 let filter = filter.as_ref().map(String::as_str);
                 let addons = match source.unwrap_or(ListSource::Installed) {
-                    ListSource::Enabled => list_enabled(&tree, &settings, filter),
-                    ListSource::Installed => list_installed(&tree, &luarocks, filter),
-                    ListSource::Online => list_online(&server, &luarocks, filter),
+                    ListSource::Enabled => list_enabled(tree, settings, filter),
+                    ListSource::Installed => list_installed(tree, luarocks, filter),
+                    ListSource::Online => list_online(server, luarocks, filter),
                 }
                 .context("while listing addons")?;
 
@@ -275,7 +290,7 @@ fn main() -> Result<()> {
             }
             Action::Install { name, version } => {
                 let version = version.as_ref().map(String::as_str);
-                install(&tree, &luarocks, &name, version)?;
+                install(tree, luarocks, &name, version)?;
             }
             Action::Remove { name, version } => {
                 let version = version.as_ref().map(String::as_str);
@@ -285,10 +300,10 @@ fn main() -> Result<()> {
                     disable(&tree, &luarocks, &settings, &name)
                         .with_context(|| format!("while disabling '{name}' before uninstalling"))?;
                 }
-                remove(&tree, &luarocks, &name, version)?;
+                remove(tree, luarocks, &name, version)?;
             }
-            Action::Enable { name } => enable(&tree, &luarocks, &settings, &name)?,
-            Action::Disable { name } => disable(&tree, &luarocks, &settings, &name)?,
+            Action::Enable { name } => enable(tree, luarocks, settings, &name)?,
+            Action::Disable { name } => disable(tree, luarocks, settings, &name)?,
         },
     }
 
