@@ -1,0 +1,5 @@
+{
+  "Lua.workspace.library": [
+    "tests/trees/one_addon/lib/luarocks/rocks-5.1/say/1.4.1-3/types"
+  ]
+}
