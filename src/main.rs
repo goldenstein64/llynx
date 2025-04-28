@@ -682,12 +682,43 @@ static LUA_CJSON_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon 
     name: String::from("lua-cjson"),
     version: String::from("2.1.0.9-1"),
     location: Some(String::from(
-        "tests\\.lls_addons\\lib\\luarocks\\rocks-5.1\\lua-cjson\\2.1.0.9-1\\types",
+        "tests\\trees\\one_addon\\lib\\luarocks\\rocks-5.1\\lua-cjson\\2.1.0.9-1\\types",
     )),
 });
 
 #[cfg(test)]
-mod test_list_online {}
+static ONLINE_LUA_CJSON_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon {
+    name: String::from("lua-cjson"),
+    version: String::from("2.1.0.9-1"),
+    location: None,
+});
+
+#[cfg(test)]
+mod test_list_online {
+    use super::*;
+
+    #[test]
+    fn one_addon() {
+        let addons = list_online(
+            "file://./tests/servers/one_addon",
+            "luarocks",
+            Some("lua-cjson"),
+        )
+        .unwrap();
+        assert_eq!(addons, vec![ONLINE_LUA_CJSON_ADDON.clone()]);
+    }
+
+    #[test]
+    fn empty() {
+        let addons = list_online(
+            "file://./tests/servers/empty",
+            "luarocks",
+            Some("lua-cjson"),
+        )
+        .unwrap();
+        assert_eq!(addons, vec![]);
+    }
+}
 
 #[cfg(test)]
 mod test_list_installed {
@@ -695,7 +726,7 @@ mod test_list_installed {
 
     #[test]
     fn one_addon() {
-        let addons = list_installed("tests/.lls_addons", "luarocks", None).unwrap();
+        let addons = list_installed("tests/trees/one_addon", "luarocks", None).unwrap();
         assert_eq!(addons, vec![LUA_CJSON_ADDON.clone()]);
     }
 }
@@ -706,34 +737,48 @@ mod test_list_enabled {
 
     #[test]
     fn not_found() {
-        let addons = list_enabled("tests/.lls_addons", "tests/settings/fake.json", None).unwrap();
+        let addons =
+            list_enabled("tests/trees/one_addon", "tests/settings/fake.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn empty() {
-        let addons = list_enabled("tests/.lls_addons", "tests/settings/empty.json", None).unwrap();
+        let addons =
+            list_enabled("tests/trees/one_addon", "tests/settings/empty.json", None).unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn no_library() {
-        let addons =
-            list_enabled("tests/.lls_addons", "tests/settings/no_library.json", None).unwrap();
+        let addons = list_enabled(
+            "tests/trees/one_addon",
+            "tests/settings/no_library.json",
+            None,
+        )
+        .unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn empty_library() {
-        let addons =
-            list_enabled("tests/.lls_addons", "tests/settings/no_library.json", None).unwrap();
+        let addons = list_enabled(
+            "tests/trees/one_addon",
+            "tests/settings/no_library.json",
+            None,
+        )
+        .unwrap();
         assert_eq!(addons, vec![]);
     }
 
     #[test]
     fn one_addon() {
-        let addons =
-            list_enabled("tests/.lls_addons", "tests/settings/one_addon.json", None).unwrap();
+        let addons = list_enabled(
+            "tests/trees/one_addon",
+            "tests/settings/one_addon.json",
+            None,
+        )
+        .unwrap();
         assert_eq!(addons, vec![LUA_CJSON_ADDON.clone()])
     }
 }
