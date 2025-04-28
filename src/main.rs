@@ -773,3 +773,30 @@ mod test_list_enabled {
         assert_eq!(addons, vec![SAY_ADDON.clone()])
     }
 }
+
+#[cfg(test)]
+mod test_enable {
+    use super::*;
+
+    #[test]
+    fn add_from_empty() {
+        let library: Vec<String> = vec![];
+        let new_path = String::from(SAY_ADDON_LOCATION);
+        let func = enable_in_library(new_path);
+        let new_library = func(library);
+        assert_eq!(new_library, vec![String::from(SAY_ADDON_LOCATION)]);
+    }
+}
+
+#[cfg(test)]
+mod test_disable {
+    use super::*;
+
+    #[test]
+    fn remove_from_one() {
+        let library = vec![String::from(SAY_ADDON_LOCATION)];
+        let func = disable_in_library(SAY_ADDON_LOCATION);
+        let new_library = func(library);
+        assert_eq!(new_library, vec![] as Vec<String>);
+    }
+}
