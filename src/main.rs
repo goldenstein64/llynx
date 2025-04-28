@@ -666,10 +666,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, target_os = "windows"))]
+#[cfg(all(test, windows))]
 static SAY_ADDON_LOCATION: &str =
     "tests\\trees\\one_addon\\lib\\luarocks\\rocks-5.1\\say\\1.4.1-3\\types";
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, unix))]
 static SAY_ADDON_LOCATION: &str = "tests/trees/one_addon/lib/luarocks/rocks-5.1/say/1.4.1-3/types";
 
 #[cfg(test)]
@@ -759,9 +759,9 @@ mod test_list_enabled {
     fn one_addon() {
         let addons = list_enabled(
             "tests/trees/one_addon",
-            #[cfg(target_os = "windows")]
+            #[cfg(windows)]
             "tests/settings/one_addon_windows.json",
-            #[cfg(target_os = "linux")]
+            #[cfg(unix)]
             "tests/settings/one_addon_linux.json",
             None,
         )
