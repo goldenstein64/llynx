@@ -609,16 +609,32 @@ fn main() -> Result<()> {
         server,
         verbose,
     } = match cli.config {
+        None => {
+            log::debug!("config file not given, attempting to read from '{CONFIG_PATH}'...");
+            match fs::read_to_string(CONFIG_PATH) {
+                Err(err) => match err.kind() {
+                    io::ErrorKind::NotFound => {
+                        log::debug!("default config file not found, using defaults...");
+                        default_config.extend(cli_overrides)
+                    }
+                    _ => {
+                        return Err(anyhow::Error::from(err))
+                            .with_context(|| format!("when opening config file '{CONFIG_PATH}'"));
+                    }
+                },
+                Ok(contents) => {
+                    let maybe_config = toml::from_str::<MaybeConfig>(&contents)
+                        .with_context(|| format!("when parsing config file '{CONFIG_PATH}'"))?;
+                    default_config.extend(maybe_config).extend(cli_overrides)
+                }
+            }
+        }
         Some(config_path) => {
             let contents = fs::read_to_string(&config_path)
                 .with_context(|| format!("when opening config file '{config_path}'"))?;
             let maybe_config = toml::from_str::<MaybeConfig>(&contents)
                 .with_context(|| format!("when parsing config file '{config_path}'"))?;
             default_config.extend(maybe_config).extend(cli_overrides)
-        }
-        None => {
-            log::debug!("config file not given, using defaults...");
-            default_config.extend(cli_overrides)
         }
     };
 
