@@ -254,13 +254,13 @@ fn list_enabled(tree: &str, settings_file: &str, filter: Option<&str>) -> Result
                 log::warn!("file '{settings_file}' was not found. Assuming empty...");
                 return Ok(vec![]);
             }
-            _ => return Err(source).with_context(|| format!("reading '{settings_file}' failed")),
+            _ => return Err(source).with_context(|| format!("while reading '{settings_file}'")),
         },
         Ok(contents) => contents,
     };
 
     let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
-        .with_context(|| format!("parsing '{settings_file}' failed"))?;
+        .with_context(|| format!("while parsing '{settings_file}'"))?;
     let value_parsed = match maybe_value_parsed {
         None => {
             log::warn!("file '{settings_file}' is empty. Assuming empty...");
@@ -270,7 +270,7 @@ fn list_enabled(tree: &str, settings_file: &str, filter: Option<&str>) -> Result
     };
 
     let vscode_settings = serde_json::from_value::<VSCodeSettings>(value_parsed)
-        .with_context(|| format!("compiling '{settings_file}' failed"))?;
+        .with_context(|| format!("while compiling '{settings_file}'"))?;
 
     let library = match vscode_settings.library {
         None => {
@@ -345,10 +345,9 @@ fn list_installed(tree: &str, luarocks_path: &str, filter: Option<&str>) -> Resu
     }
     log::info!("executing: {luarocks:?}");
 
-    let output = luarocks.output().context("execution of luarocks failed")?;
+    let output = luarocks.output().context("while executing luarocks")?;
 
-    let stdout =
-        std::str::from_utf8(&output.stdout).context("decoding of luarocks output failed")?;
+    let stdout = std::str::from_utf8(&output.stdout).context("while decoding luarocks output")?;
 
     // because the CSV reader only reads files, a Cursor represents the string's
     // file handle
@@ -411,9 +410,8 @@ fn list_online(server: &str, luarocks_path: &str, filter: Option<&str>) -> Resul
     ]);
     log::info!("executing: {luarocks:?}");
 
-    let output = luarocks.output().context("execution of luarocks failed")?;
-    let stdout =
-        std::str::from_utf8(&output.stdout).context("decoding of luarocks output failed")?;
+    let output = luarocks.output().context("while executing luarocks")?;
+    let stdout = std::str::from_utf8(&output.stdout).context("while decoding luarocks output")?;
 
     // because the CSV reader only reads files, a Cursor represents the string's
     // file handle
@@ -465,15 +463,15 @@ fn execute_command(mut command: Command) -> Result<()> {
         Ok(output) => {
             io::stdout()
                 .write_all(&output.stdout)
-                .context("error while writing out stdout")?;
+                .context("while writing out stdout")?;
             io::stderr()
                 .write_all(&output.stderr)
-                .context("error while writing to stderr")?;
+                .context("while writing to stderr")?;
         }
         Err(err) => {
             io::stderr()
                 .write_all(format!("{err}").as_bytes())
-                .context("error while writing to stderr")?;
+                .context("while writing to stderr")?;
         }
     }
 
@@ -508,17 +506,17 @@ fn update_library(
     let contents = match fs::read_to_string(settings_file) {
         Err(source) => match source.kind() {
             io::ErrorKind::NotFound => String::new(),
-            _ => return Err(source).with_context(|| format!("reading '{settings_file}' failed")),
+            _ => return Err(source).with_context(|| format!("while reading '{settings_file}'")),
         },
         Ok(contents) => contents,
     };
 
     let maybe_value_parsed = parse_to_serde_value(&contents, &ParseOptions::default())
-        .with_context(|| format!("parsing '{settings_file}' failed"))?;
+        .with_context(|| format!("while parsing '{settings_file}'"))?;
     let mut vscode_settings = match maybe_value_parsed {
         None => VSCodeSettings::default(),
         Some(value_parsed) => serde_json::from_value::<VSCodeSettings>(value_parsed)
-            .with_context(|| format!("compiling '{settings_file}' failed"))?,
+            .with_context(|| format!("while compiling '{settings_file}'"))?,
     };
 
     vscode_settings.library = Some(f(vscode_settings.library.unwrap_or_default())?);
@@ -619,21 +617,21 @@ fn main() -> Result<()> {
                     }
                     _ => {
                         return Err(anyhow::Error::from(err))
-                            .with_context(|| format!("when opening config file '{CONFIG_PATH}'"));
+                            .with_context(|| format!("while opening config file '{CONFIG_PATH}'"));
                     }
                 },
                 Ok(contents) => {
                     let maybe_config = toml::from_str::<MaybeConfig>(&contents)
-                        .with_context(|| format!("when parsing config file '{CONFIG_PATH}'"))?;
+                        .with_context(|| format!("while parsing config file '{CONFIG_PATH}'"))?;
                     default_config.extend(maybe_config).extend(cli_overrides)
                 }
             }
         }
         Some(config_path) => {
             let contents = fs::read_to_string(&config_path)
-                .with_context(|| format!("when opening config file '{config_path}'"))?;
+                .with_context(|| format!("while opening config file '{config_path}'"))?;
             let maybe_config = toml::from_str::<MaybeConfig>(&contents)
-                .with_context(|| format!("when parsing config file '{config_path}'"))?;
+                .with_context(|| format!("while parsing config file '{config_path}'"))?;
             default_config.extend(maybe_config).extend(cli_overrides)
         }
     };
@@ -653,7 +651,7 @@ fn main() -> Result<()> {
                     ListSource::Installed => list_installed(&tree, &luarocks, filter),
                     ListSource::Online => list_online(&server, &luarocks, filter),
                 }
-                .context("error while listing addons")?;
+                .context("while listing addons")?;
 
                 print_addons_list(addons);
             }
@@ -666,9 +664,8 @@ fn main() -> Result<()> {
                 #[cfg(feature = "disable_before_remove")]
                 {
                     log::info!("disabling '{name}' first...");
-                    disable(&tree, &luarocks, &settings, &name).with_context(|| {
-                        anyhow!("error when disabling '{name}' before uninstalling")
-                    })?;
+                    disable(&tree, &luarocks, &settings, &name)
+                        .with_context(|| format!("while disabling '{name}' before uninstalling"))?;
                 }
                 remove(&tree, &luarocks, &name, version)?;
             }
