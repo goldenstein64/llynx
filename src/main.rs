@@ -54,12 +54,28 @@ impl Default for VSCodeSettings {
 struct MaybeConfig {
     #[allow(dead_code)]
     #[serde(rename = "$schema")]
-    schema: Option<String>,
+    schema: Option<String>, // this is unused
     luarocks: Option<String>,
     tree: Option<String>,
     settings: Option<String>,
     server: Option<String>,
     verbose: Option<u8>,
+}
+
+impl From<&Cli> for MaybeConfig {
+    fn from(cli: &Cli) -> Self {
+        MaybeConfig {
+            schema: None,
+            luarocks: cli.luarocks.clone(),
+            tree: cli.luarocks.clone(),
+            settings: cli.settings.clone(),
+            server: cli.server.clone(),
+            verbose: match cli.verbose {
+                0 => None,
+                v => Some(v),
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -69,6 +85,38 @@ struct Config {
     settings: String,
     server: String,
     verbose: u8,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            luarocks: String::from(LUAROCKS_PATH),
+            tree: String::from(ADDONS_DIR),
+            settings: String::from(SETTINGS_FILE),
+            server: String::from(LUAROCKS_ENDPOINT),
+            verbose: 0,
+        }
+    }
+}
+
+impl Config {
+    fn extend(self, maybe_config: MaybeConfig) -> Self {
+        let MaybeConfig {
+            schema: _,
+            luarocks,
+            tree,
+            settings,
+            server,
+            verbose,
+        } = maybe_config;
+        Config {
+            luarocks: luarocks.unwrap_or(self.luarocks),
+            tree: tree.unwrap_or(self.tree),
+            settings: settings.unwrap_or(self.settings),
+            server: server.unwrap_or(self.server),
+            verbose: verbose.unwrap_or(self.verbose),
+        }
+    }
 }
 
 /// error type for showing multiple errors
@@ -117,25 +165,25 @@ struct Addon {
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 struct Cli {
-    /// configuration file for specifying frequently used flags
-    #[arg(short, long, value_name = "file-path", default_value = CONFIG_PATH, conflicts_with_all = ["luarocks", "tree", "settings", "server"])]
-    config: String,
+    /// configuration file for specifying frequently used flags. Defaults to ".llynx.toml"
+    #[arg(short, long, value_name = "file-path")]
+    config: Option<String>,
 
-    /// Set the path to the LuaRocks executable
-    #[arg(short, long, value_name = "file-path", default_value = LUAROCKS_PATH)]
-    luarocks: String,
+    /// Set the path to the LuaRocks executable. Looks on PATH by default
+    #[arg(short, long, value_name = "file-path")]
+    luarocks: Option<String>,
 
-    /// Set a custom rocks tree directory
-    #[arg(short, long, value_name = "dir-path", default_value = ADDONS_DIR)]
-    tree: String,
+    /// Set a custom rocks tree directory. Defaults to "./.lls_addons"
+    #[arg(short, long, value_name = "dir-path")]
+    tree: Option<String>,
 
-    /// Modify this settings file
+    /// Modify this settings file. Defaults to "./.vscode/settings.json"
     #[arg(long, value_name = "file-path", default_value = SETTINGS_FILE)]
-    settings: String,
+    settings: Option<String>,
 
-    /// Make LuaRocks look for addons in this server only
+    /// Make LuaRocks look for addons in this server first. Defaults to "https://luarocks.org/m/lls-addons"
     #[arg(long, value_name = "url", default_value = LUAROCKS_ENDPOINT)]
-    server: String,
+    server: Option<String>,
 
     /// Increase verbosity; can be repeated
     #[arg(short, action = clap::ArgAction::Count)]
@@ -549,39 +597,28 @@ fn disable(tree: &str, luarocks_path: &str, settings_file: &str, name: &str) -> 
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let command = cli.command;
 
+    // config should be calculated like this:
+    // CLI args -> Config arg -> defaults
+    let default_config = Config::default();
+    let cli_overrides = MaybeConfig::from(&cli);
     let Config {
         luarocks,
         tree,
         settings,
         server,
         verbose,
-    } = match fs::read_to_string(&cli.config) {
-        Ok(contents) => {
+    } = match cli.config {
+        Some(config_path) => {
+            let contents = fs::read_to_string(&config_path)
+                .with_context(|| format!("when opening config file '{config_path}'"))?;
             let maybe_config = toml::from_str::<MaybeConfig>(&contents)
-                .with_context(|| format!("error parsing config file '{}'", cli.config))?;
-            Config {
-                luarocks: maybe_config.luarocks.unwrap_or(cli.luarocks),
-                tree: maybe_config.tree.unwrap_or(cli.tree),
-                settings: maybe_config.settings.unwrap_or(cli.settings),
-                server: maybe_config.server.unwrap_or(cli.server),
-                verbose: maybe_config.verbose.unwrap_or(cli.verbose),
-            }
+                .with_context(|| format!("when parsing config file '{config_path}'"))?;
+            default_config.extend(maybe_config).extend(cli_overrides)
         }
-        Err(err) => {
-            log::info!(
-                "failed to read config file '{}', using defaults...",
-                cli.config
-            );
-            log::debug!("{err}");
-            Config {
-                luarocks: cli.luarocks,
-                tree: cli.tree,
-                settings: cli.settings,
-                server: cli.server,
-                verbose: cli.verbose,
-            }
+        None => {
+            log::debug!("config file not given, using defaults...");
+            default_config.extend(cli_overrides)
         }
     };
 
@@ -590,7 +627,7 @@ fn main() -> Result<()> {
         .verbosity(verbose as usize)
         .init()?;
 
-    match command {
+    match cli.command {
         None => Cli::command().print_help().unwrap(),
         Some(action) => match action {
             Action::List { source, filter } => {
