@@ -44,22 +44,6 @@ struct MaybeConfig {
     verbose: Option<u8>,
 }
 
-impl From<&Cli> for MaybeConfig {
-    fn from(cli: &Cli) -> Self {
-        MaybeConfig {
-            schema: None,
-            luarocks: cli.luarocks.clone(),
-            tree: cli.luarocks.clone(),
-            settings: cli.settings.clone(),
-            server: cli.server.clone(),
-            verbose: match cli.verbose {
-                0 => None,
-                v => Some(v),
-            },
-        }
-    }
-}
-
 #[derive(Debug)]
 struct Config<'a> {
     luarocks: &'a str,
@@ -255,7 +239,17 @@ fn main() -> Result<()> {
     let default_config = Config::default();
     let file_overrides: Option<MaybeConfig> =
         get_file_overrides(cli.config.as_ref().map(String::as_str))?;
-    let cli_overrides = MaybeConfig::from(&cli);
+    let cli_overrides = MaybeConfig {
+        schema: None,
+        luarocks: cli.luarocks,
+        tree: cli.tree,
+        settings: cli.settings,
+        server: cli.server,
+        verbose: match cli.verbose {
+            0 => None,
+            _ => Some(cli.verbose),
+        },
+    };
 
     let Config {
         luarocks,
