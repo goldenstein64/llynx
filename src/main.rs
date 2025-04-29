@@ -33,6 +33,7 @@ const SETTINGS_FILE: &str = ".vscode/settings.json";
 const LIB_SETTINGS_KEY: &str = "Lua.workspace.library";
 
 #[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
 struct MaybeConfig {
     #[allow(dead_code)]
     #[serde(rename = "$schema")]
@@ -323,6 +324,98 @@ static ONLINE_SAY_ADDON: LazyLock<Addon, fn() -> Addon> = LazyLock::new(|| Addon
     version: String::from("1.4.1-3"),
     location: None,
 });
+
+#[cfg(test)]
+mod test_config {
+    use super::*;
+
+    #[test]
+    fn empty() {
+        let empty_config = get_cli_config_file_overrides("tests/configs/empty.toml").unwrap();
+        assert_eq!(empty_config.schema, None);
+        assert_eq!(empty_config.luarocks, None);
+        assert_eq!(empty_config.server, None);
+        assert_eq!(empty_config.settings, None);
+        assert_eq!(empty_config.tree, None);
+        assert_eq!(empty_config.verbose, None);
+    }
+
+    #[test]
+    fn schema() {
+        let schema_config =
+            get_cli_config_file_overrides("tests/configs/empty_schema.toml").unwrap();
+        assert_eq!(schema_config.schema, Some(String::from("")));
+        assert_eq!(schema_config.luarocks, None);
+        assert_eq!(schema_config.server, None);
+        assert_eq!(schema_config.settings, None);
+        assert_eq!(schema_config.tree, None);
+        assert_eq!(schema_config.verbose, None);
+    }
+
+    #[test]
+    fn some_args() {
+        let some_config = get_cli_config_file_overrides("tests/configs/some_args.toml").unwrap();
+        assert_eq!(some_config.schema, Some(String::from("some_schema")));
+        assert_eq!(some_config.luarocks, Some(String::from("some_luarocks")));
+        assert_eq!(some_config.tree, Some(String::from("some_tree")));
+        assert_eq!(some_config.server, None);
+        assert_eq!(some_config.settings, None);
+        assert_eq!(some_config.verbose, None);
+    }
+
+    #[test]
+    fn all_args() {
+        let all_config = get_cli_config_file_overrides("tests/configs/all_args.toml").unwrap();
+        assert_eq!(all_config.schema, Some(String::from("some_schema")));
+        assert_eq!(all_config.luarocks, Some(String::from("some_luarocks")));
+        assert_eq!(all_config.server, Some(String::from("some_server")));
+        assert_eq!(all_config.settings, Some(String::from("some_settings")));
+        assert_eq!(all_config.tree, Some(String::from("some_tree")));
+        assert_eq!(all_config.verbose, Some(8));
+    }
+
+    #[test]
+    fn test_illegal() {
+        get_cli_config_file_overrides("tests/configs/illegal.toml").unwrap_err();
+    }
+}
+
+#[cfg(test)]
+mod test_config_extend {
+    use super::*;
+
+    #[test]
+    fn default() {
+        let default_config = Config::default();
+        assert_eq!(default_config.luarocks, LUAROCKS_PATH);
+        assert_eq!(default_config.server, LUAROCKS_ENDPOINT);
+        assert_eq!(default_config.settings, SETTINGS_FILE);
+        assert_eq!(default_config.tree, ADDONS_DIR);
+        assert_eq!(default_config.verbose, 0);
+    }
+
+    #[test]
+    fn extend_some_args() {
+        let some_config = get_cli_config_file_overrides("tests/configs/some_args.toml").unwrap();
+        let config = Config::default().extend(&some_config);
+        assert_eq!(config.luarocks, String::from("some_luarocks"));
+        assert_eq!(config.tree, String::from("some_tree"));
+        assert_eq!(config.server, LUAROCKS_ENDPOINT);
+        assert_eq!(config.settings, SETTINGS_FILE);
+        assert_eq!(config.verbose, 0);
+    }
+
+    #[test]
+    fn extend_all_args() {
+        let all_config = get_cli_config_file_overrides("tests/configs/all_args.toml").unwrap();
+        let config = Config::default().extend(&all_config);
+        assert_eq!(config.luarocks, String::from("some_luarocks"));
+        assert_eq!(config.server, String::from("some_server"));
+        assert_eq!(config.settings, String::from("some_settings"));
+        assert_eq!(config.tree, String::from("some_tree"));
+        assert_eq!(config.verbose, 8);
+    }
+}
 
 #[cfg(test)]
 mod test_list_online {

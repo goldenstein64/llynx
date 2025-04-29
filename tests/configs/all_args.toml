@@ -1,0 +1,6 @@
+"$schema" = "some_schema"
+luarocks = "some_luarocks"
+tree = "some_tree"
+settings = "some_settings"
+server = "some_server"
+verbose = 8

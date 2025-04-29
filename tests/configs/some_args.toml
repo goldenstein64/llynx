@@ -1,0 +1,3 @@
+"$schema" = "some_schema"
+luarocks = "some_luarocks"
+tree = "some_tree"
