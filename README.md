@@ -41,6 +41,8 @@ settings = ".vscode/settings.json"
 server = "https://luarocks.org/m/lls-addons"
 ```
 
+You can also provide a path to a config file in the CLI using the `-c` or `--config` option.
+
 ## Installation
 
 For development, you should [install a Rust toolchain](https://www.rust-lang.org/tools/install). I use `stable-gnu` on Windows.
