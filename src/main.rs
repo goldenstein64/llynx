@@ -494,17 +494,14 @@ mod test_list_enabled {
         assert_eq!(addons, vec![]);
     }
 
+    #[cfg(windows)]
+    const ONE_ADDON_PATH: &str = "tests/settings/one_addon_windows.json";
+    #[cfg(unix)]
+    const ONE_ADDON_PATH: &str = "tests/settings/one_addon_linux.json";
+
     #[test]
     fn one_addon() {
-        let addons = list_enabled(
-            "tests/trees/one_addon",
-            #[cfg(windows)]
-            "tests/settings/one_addon_windows.json",
-            #[cfg(unix)]
-            "tests/settings/one_addon_linux.json",
-            None,
-        )
-        .unwrap();
+        let addons = list_enabled("tests/trees/one_addon", ONE_ADDON_PATH, None).unwrap();
         assert_eq!(addons, vec![SAY_ADDON.clone()])
     }
 }
