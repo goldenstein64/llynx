@@ -126,7 +126,7 @@ struct Cli {
     verbose: u8,
 
     #[command(subcommand)]
-    command: Option<Action>,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand, PartialEq, Eq)]
@@ -142,7 +142,7 @@ enum ListSource {
 }
 
 #[derive(Debug, Subcommand, PartialEq, Eq)]
-enum Action {
+enum Command {
     /// List all installed, online, or enabled addons
     List {
         #[command(subcommand)]
@@ -232,6 +232,56 @@ fn get_file_overrides(path: Option<&str>) -> Result<Option<MaybeConfig>> {
         .transpose()
 }
 
+fn run_command(action: Option<Command>, config: Config) -> Result<()> {
+    let Config {
+        luarocks,
+        tree,
+        settings,
+        server,
+        verbose,
+    } = config;
+
+    stderrlog::new()
+        .timestamp(stderrlog::Timestamp::Off)
+        .verbosity(verbose as usize)
+        .init()?;
+
+    match action {
+        None => Cli::command().print_help().unwrap(),
+        Some(action) => match action {
+            Command::List { source, filter } => {
+                let filter = filter.as_ref().map(String::as_str);
+                let addons = match source.unwrap_or(ListSource::Installed) {
+                    ListSource::Enabled => list_enabled(tree, settings, filter),
+                    ListSource::Installed => list_installed(tree, luarocks, filter),
+                    ListSource::Online => list_online(server, luarocks, filter),
+                }
+                .context("while listing addons")?;
+
+                print_addons_list(addons);
+            }
+            Command::Install { name, version } => {
+                let version = version.as_ref().map(String::as_str);
+                install(tree, luarocks, &name, version)?;
+            }
+            Command::Remove { name, version } => {
+                let version = version.as_ref().map(String::as_str);
+                #[cfg(feature = "disable_before_remove")]
+                {
+                    log::info!("disabling '{name}' first...");
+                    disable(&tree, &luarocks, &settings, &name)
+                        .with_context(|| format!("while disabling '{name}' before uninstalling"))?;
+                }
+                remove(tree, luarocks, &name, version)?;
+            }
+            Command::Enable { name } => enable(tree, luarocks, settings, &name)?,
+            Command::Disable { name } => disable(tree, luarocks, settings, &name)?,
+        },
+    };
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -252,55 +302,13 @@ fn main() -> Result<()> {
         },
     };
 
-    let Config {
-        luarocks,
-        tree,
-        settings,
-        server,
-        verbose,
-    } = match file_overrides {
+    let config = match file_overrides {
         Some(ref overrides) => default_config.extend(overrides),
         None => default_config,
     }
     .extend(&cli_overrides);
 
-    stderrlog::new()
-        .timestamp(stderrlog::Timestamp::Off)
-        .verbosity(verbose as usize)
-        .init()?;
-
-    match cli.command {
-        None => Cli::command().print_help().unwrap(),
-        Some(action) => match action {
-            Action::List { source, filter } => {
-                let filter = filter.as_ref().map(String::as_str);
-                let addons = match source.unwrap_or(ListSource::Installed) {
-                    ListSource::Enabled => list_enabled(tree, settings, filter),
-                    ListSource::Installed => list_installed(tree, luarocks, filter),
-                    ListSource::Online => list_online(server, luarocks, filter),
-                }
-                .context("while listing addons")?;
-
-                print_addons_list(addons);
-            }
-            Action::Install { name, version } => {
-                let version = version.as_ref().map(String::as_str);
-                install(tree, luarocks, &name, version)?;
-            }
-            Action::Remove { name, version } => {
-                let version = version.as_ref().map(String::as_str);
-                #[cfg(feature = "disable_before_remove")]
-                {
-                    log::info!("disabling '{name}' first...");
-                    disable(&tree, &luarocks, &settings, &name)
-                        .with_context(|| format!("while disabling '{name}' before uninstalling"))?;
-                }
-                remove(tree, luarocks, &name, version)?;
-            }
-            Action::Enable { name } => enable(tree, luarocks, settings, &name)?,
-            Action::Disable { name } => disable(tree, luarocks, settings, &name)?,
-        },
-    }
+    run_command(cli.command, config)?;
 
     Ok(())
 }
