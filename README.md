@@ -32,9 +32,18 @@ Options:
   -h, --help                  Print help
 ```
 
-For development, you should [install a Rust toolchain](https://www.rust-lang.org/tools/install). I use `stable-gnu` on Windows.
+You can add a `.llynx.toml` to the current directory to save configuration options without adding arguments in the CLI. Here are the defaults, for example.
+
+```toml
+luarocks = "luarocks"
+tree = ".lls_addons"
+settings = ".vscode/settings.json"
+server = "https://luarocks.org/m/lls-addons"
+```
 
 ## Installation
+
+For development, you should [install a Rust toolchain](https://www.rust-lang.org/tools/install). I use `stable-gnu` on Windows.
 
 Run `cargo install` (this is not set up yet).
 
