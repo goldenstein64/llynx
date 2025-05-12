@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "the JSON schema",
+      "default": "https://raw.githubusercontent.com/goldenstein64/llynx/refs/heads/main/schemas/.llynx.schema.json"
+    },
+    "luarocks": {
+      "type": "string",
+      "description": "Use this LuaRocks executable. Looks on PATH by default",
+      "default": "luarocks"
+    },
+    "tree": {
+      "type": "string",
+      "description": "Use this rocks tree to store addons. Defaults to \".lls_addons\"",
+      "default": ".lls_addons"
+    },
+    "settings": {
+      "type": "string",
+      "description": "Modify this settings file. Defaults to \"./.vscode/settings.json\"",
+      "default": ".vscode/settings.json"
+    },
+    "server": {
+      "type": "string",
+      "description": "Make LuaRocks look for addons in this server. Defaults to \"https://luarocks.org/m/lls-addons\"",
+      "default": "https://luarocks.org/m/lls-addons"
+    },
+    "verbose": {
+      "type": "integer",
+      "description": "Increase verbosity.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 5
+    }
+  }
+}
