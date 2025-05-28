@@ -22,7 +22,7 @@ struct InstalledAddonRecord {
 /// fetches from the .lls_addons tree
 pub fn list_installed(tree: &str, luarocks_path: &str, filter: Option<&str>) -> Result<Vec<Addon>> {
     let mut luarocks = Command::new(luarocks_path);
-    luarocks.args(["--tree", tree, "list", "--porcelain"]);
+    luarocks.args(&["--tree", tree, "list", "--porcelain"]);
     if let Some(fil) = filter {
         luarocks.arg(fil);
     }
@@ -98,7 +98,7 @@ fn execute_command(mut command: Command) -> Result<()> {
 /// forward installing to LuaRocks
 pub fn install(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
     let mut install_command = Command::new(luarocks_path);
-    install_command.args(["--tree", tree, "install", name]);
+    install_command.args(&["--tree", tree, "install", name]);
     if let Some(ver) = version {
         install_command.arg(ver);
     }
@@ -108,7 +108,7 @@ pub fn install(tree: &str, luarocks_path: &str, name: &str, version: Option<&str
 /// forward uninstalling to LuaRocks
 pub fn remove(tree: &str, luarocks_path: &str, name: &str, version: Option<&str>) -> Result<()> {
     let mut remove_command = Command::new(luarocks_path);
-    remove_command.args(["--tree", tree, "remove", name]);
+    remove_command.args(&["--tree", tree, "remove", name]);
     if let Some(ver) = version {
         remove_command.arg(ver);
     }
