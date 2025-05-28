@@ -1,6 +1,6 @@
-"$schema" = "some_schema"
+"$schema" = "https://raw.githubusercontent.com/goldenstein64/llynx/refs/heads/main/schemas/.llynx.schema.json"
 luarocks = "some_luarocks"
 tree = "some_tree"
 settings = "some_settings"
 server = "some_server"
-verbose = 8
+verbose = 5
